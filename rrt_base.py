@@ -4,7 +4,7 @@ from rtree import index
 from search_space import SearchSpace
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
-from Robot_Env import dt, j_max
+from Robot_Env import dt, j_max, tau_max, jnt_vel_max
 
 def steer(th1, th2, d):
     start, end = np.array(th1),np.array(th2)
@@ -27,18 +27,28 @@ class vertex(object):
         '''
         th2 = np.array(th2)
         t = steps * dt
+        # maximum reachable change based on max jerk
         J = (th2 - (self.tau * (t**2/2) + self.w * (t) + self.th)) / (t**3/6)
         J = np.clip(J, -j_max, j_max)
-        # maximum reachable change in th based on maximum jerk
-        th2 = J * (t**3/6) + self.tau * (t**2/2) + self.w * t + self.th
-        return np.linalg.norm(th2 - self.th)
+        temp = J * (t**3/6) + self.tau * (t**2/2) + self.w * t + self.th
+        r_max_j = np.linalg.norm(temp - self.th)
+        # max reachable change based on max torque
+        tau = (th2 - self.th1 - self.w*t) / (t**2/2)
+        tau = np.clip(tau, -tau_max, tau_max)
+        temp = tau*(t**2/2) + self.w*t + self.th
+        r_max_tau = np.linalg.norm(temp - self.th)
+        # max reachable change based on max velocity
+        w = (th2 - self.th)/t
+        w = np.clip(w, -jnt_vel_max, jnt_vel_max)
+        temp = w*t + self.th
+        r_max_w = np.linalg.norm(temp - self.th)
+        return np.min([r_max_j, r_max_tau, r_max_w])
     
-    '''
-    need to add the look-ahead functionality that will add paused nodes if a node 
-    cannot slow down in time to avoid a collision
-    looks ahead the number of time steps it takes to slow down (doesn't look at every single one
-    stops at first detection of a collision)
-    '''
+    def stoping_point(self):
+        '''
+        Return the position the arm would be after an emergency stop
+        '''
+
 
 
 class Tree(object):
@@ -119,23 +129,25 @@ class RRTBase(object):
         self.sample_count += 1
         return th_new, v_nearest
 
-    def connect_to_point(self, v_a:vertex, v_b:vertex, tries=10):
-        # connect vertex a and vertex b together
+    def connect_to_point(self, v_a:vertex, v_b:vertex):
+        """
+        connect vertex a to vertex b
+        solve for tau, w, and th of vertex b
+        """
         v_b.t = v_a.t + 1
-        for i in range(tries):
-            if self.tree.V.count(v_b.th) == 0:
-                r = np.array(v_b.th) - np.array(v_a.th)
-
-                r_max = 
-                if r < self.r:
-                    self.add_vertex(v_b)
-                    self.add_edge(v_b, v_a)
-                else:
-                    v_b.th = steer(v_a.th, v_b.th, self.r)
-                    self.add_vertex(v_b)
-                    self.add_edge(v_b, v_a)
-                return True
+        if self.tree.V.count(v_b.th) == 0:
+            r = np.linalg.norm(np.array(v_b.th) - np.array(v_a.th))
+            r_max = v_a.r_max(v_b.th)
+            if r < r_max:
+                self.add_vertex(v_b)
+                self.add_edge(v_b, v_a)
+            else:
+                v_b.th = steer(v_a.th, v_b.th, r_max)
+                self.add_vertex(v_b)
+                self.add_edge(v_b, v_a)
+            return True
         return False
+
 
     def can_connect_to_goal(self):
         # check if we can connect
