@@ -59,5 +59,4 @@ max_samples = int(5e3)
 
 rrt = RRT_star(X, start, goal, max_samples, r)
 path = rrt.rrt_search()
-print(path)
 rrt.plot_graph(add_path=True, path=path)

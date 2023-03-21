@@ -24,8 +24,8 @@ tau_max = 30 #J*rad/s^2, J = 1
 damping = tau_max*.8
 P = 10.0
 D = 5.0
-
 jnt_vel_max = np.pi # rad/s
+j_max = tau_max/dt # maximum allowable jerk on the joints
 
 rng = np.random.default_rng()
 

@@ -67,29 +67,29 @@ def stack_arrays(coord_list:list, feat_list:list, new_state:tuple):
     return coord_list, feat_list
 
 
-def gen_obstacles(env:RobotEnv, obs_index:index.Index):
-    '''
-    have to generate the min and max corners of obstacles at 
-    each time step
-    '''
-    objs = env.objs.copy()
-    dt = Robot_Env.dt
-    t_limit = Robot_Env.t_limit
-    min_prox = Robot_Env.min_prox
-    obs = []
+# def gen_obstacles(env:RobotEnv, obs_index:index.Index):
+#     '''
+#     have to generate the min and max corners of obstacles at 
+#     each time step
+#     '''
+#     objs = env.objs.copy()
+#     dt = Robot_Env.dt
+#     t_limit = Robot_Env.t_limit
+#     min_prox = Robot_Env.min_prox
+#     obs = []
 
-    t = 0
-    time_steps = int(np.ceil(t_limit/dt))
-    while t <= time_steps:
-        for o in objs:
-            center = o.curr_pos
-            x,y,z = center[0],center[1],center[2]
-            obs_i = (t, x-min_prox, y-min_prox, z-min_prox, t, x+min_prox, y+min_prox, z+min_prox)
-            obs_index.add(uuid.uuid4(), obs_i)
-            obs.append(obs_i)
-            o.step()
-        t += 1
+#     t = 0
+#     time_steps = int(np.ceil(t_limit/dt))
+#     while t <= time_steps:
+#         for o in objs:
+#             center = o.curr_pos
+#             x,y,z = center[0],center[1],center[2]
+#             obs_i = (t, x-min_prox, y-min_prox, z-min_prox, t, x+min_prox, y+min_prox, z+min_prox)
+#             obs_index.add(uuid.uuid4(), obs_i)
+#             obs.append(obs_i)
+#             o.step()
+#         t += 1
 
-    return obs
+#     return obs
 
         

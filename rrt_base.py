@@ -4,6 +4,7 @@ from rtree import index
 from search_space import SearchSpace
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
+from Robot_Env import dt, j_max
 
 def steer(th1, th2, d):
     start, end = np.array(th1),np.array(th2)
@@ -16,6 +17,29 @@ class vertex(object):
         self.th = th # (th1,th2,th3) tuple
         self.t = t
         self.cost = 0
+        self.w = np.zeros_like(self.th)
+        self.tau = np.zeros_like(self.th)
+
+    def r_max(self, th2, steps):
+        '''
+        th2 = next goal pose (th1,th2,th3) as a tuple 
+        returns: maximum distance along (th2-th1) vector based on max jerk
+        '''
+        th2 = np.array(th2)
+        t = steps * dt
+        J = (th2 - (self.tau * (t**2/2) + self.w * (t) + self.th)) / (t**3/6)
+        J = np.clip(J, -j_max, j_max)
+        # maximum reachable change in th based on maximum jerk
+        th2 = J * (t**3/6) + self.tau * (t**2/2) + self.w * t + self.th
+        return np.linalg.norm(th2 - self.th)
+    
+    '''
+    need to add the look-ahead functionality that will add paused nodes if a node 
+    cannot slow down in time to avoid a collision
+    looks ahead the number of time steps it takes to slow down (doesn't look at every single one
+    stops at first detection of a collision)
+    '''
+
 
 class Tree(object):
     def __init__(self, dims):
@@ -99,8 +123,10 @@ class RRTBase(object):
         # connect vertex a and vertex b together
         v_b.t = v_a.t + 1
         for i in range(tries):
-            if self.tree.V.count(v_b.th) == 0 and self.X.collision_free(v_a.th, v_b.th, v_a.t+i, v_b.t+i+1):
-                r = np.linalg.norm(np.array(v_b.th) - np.array(v_a.th))
+            if self.tree.V.count(v_b.th) == 0:
+                r = np.array(v_b.th) - np.array(v_a.th)
+
+                r_max = 
                 if r < self.r:
                     self.add_vertex(v_b)
                     self.add_edge(v_b, v_a)

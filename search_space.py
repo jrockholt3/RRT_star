@@ -1,7 +1,33 @@
 import numpy as np
 from rtree import index
-from utils import gen_obstacles
 from Robot_Env import RobotEnv
+import Robot_Env
+import uuid
+
+def gen_obstacles(env:RobotEnv, obs_index:index.Index):
+    '''
+    have to generate the min and max corners of obstacles at 
+    each time step
+    '''
+    objs = env.objs.copy()
+    dt = Robot_Env.dt
+    t_limit = Robot_Env.t_limit
+    min_prox = Robot_Env.min_prox
+    obs = []
+
+    t = 0
+    time_steps = int(np.ceil(t_limit/dt))
+    while t <= time_steps:
+        for o in objs:
+            center = o.curr_pos
+            x,y,z = center[0],center[1],center[2]
+            obs_i = (t, x-min_prox, y-min_prox, z-min_prox, t, x+min_prox, y+min_prox, z+min_prox)
+            obs_index.add(uuid.uuid4(), obs_i)
+            obs.append(obs_i)
+            o.step()
+        t += 1
+
+    return obs
 
 
 class SearchSpace(object):
@@ -43,19 +69,27 @@ class SearchSpace(object):
             if self.obstacle_free(x):
                 return x
 
-    def collision_free(self, start, end, t1, t2):
+    def collision_free(self, start, end, t1, steps):
         """
         Check if a line segment intersects an obstacle
-        :param start: start pose of the robot
-        :param end: ending pose of the robot 
+        :param start: start pose of the robot as a tup
+        :param end: ending pose of the robot as a tup
         :param t1, t2: time steps for start and end
         :return: True if line segment does not intersect an obstacle, False otherwise
         """
-        x1 = self.gen_car_ptns(start,t1)
-        x2 = self.gen_car_ptns(end,t2)
-        if self.obstacle_free(x1) and self.obstacle_free(x2):
-            return True
-        return False
+        t2 = t1 + steps
+        x = []
+        curr = np.array(start)
+        u = (curr - np.array(end))/steps
+        for t in range(t1,t2):
+            x.append(self.gen_car_ptns(curr,t))
+            curr = curr + u * (t-t1)
+        x.append(self.gen_car_ptns(end,t2))
+
+        for x_ in x:
+            if not self.obstacle_free(x_):
+                return False
+        return True
 
     def sample(self):
         """
