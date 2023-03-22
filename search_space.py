@@ -1,6 +1,6 @@
 import numpy as np
 from rtree import index
-from Robot_Env import RobotEnv
+from Robot_Env import RobotEnv, dt, t_limit, min_prox
 import Robot_Env
 import uuid
 
@@ -29,6 +29,26 @@ def gen_obstacles(env:RobotEnv, obs_index:index.Index):
 
     return obs
 
+def gen_obs_pos(obj_list):
+    '''
+    obj_list: list of environment objects
+    returns: a dictionary whose keys are time steps and items are a
+             3xn array with column vectors of the n object locations
+    '''
+    time_steps = int(np.ceil(t_limit/dt))
+    t = 0
+    obs_dict = {}
+    temp = np.ones((3,len(obj_list)))
+    while t < time_steps:
+        i = 0
+        for o in obj_list:
+            center = o.curr_pos
+            temp[:,i] = center
+            o.step()
+        obs_dict[t] = temp
+        t+=1
+    
+    return obs_dict
 
 class SearchSpace(object):
     def __init__(self, dimension_lengths, env:RobotEnv):
@@ -38,9 +58,11 @@ class SearchSpace(object):
         p = index.Property()
         p.dimension = self.dimension
 
-        obs = index.Index(interleaved=True, properties=p)
-        gen_obstacles(env,obs)
-        self.obs = obs
+        # obs = index.Index(interleaved=True, properties=p)
+        # gen_obstacles(env,obs)
+        # self.obs = obs
+
+        self.obs_pos = gen_obs_pos(env.objs.copy())
 
         self.jnt_max = env.robot.jnt_max.copy()
         self.jnt_min = env.robot.jnt_min.copy()
@@ -57,6 +79,36 @@ class SearchSpace(object):
                 return False
 
         return True 
+
+    def pose_free(self, th, t):
+        '''
+        checks for a min_prox violation use the env's robot and obj locations at t
+        returns True is the pose is free, false if not free, and the proximity
+        '''
+        self.env.robot.set_pose(th)
+        objs = self.obs_pos[t]
+        prox = np.inf
+        for i in range(0,objs.shape[1]):
+            prox_i = self.env.robot.proximity(objs[:,i])
+            for j in range(prox_i.shape[0]):
+                if prox_i[j]<prox:
+                    prox = prox_i[j]
+
+        if prox < min_prox:
+            return False, prox
+        else:
+            return True, prox
+
+    def sample_free_prox(self, t):
+        '''
+        Sample a location within joint space
+        returns a free pose and the proximity at the pose
+        '''
+        while True:
+            th = self.sample()
+            free, prox = self.pose_free(th,t)
+            if free:
+                return th, prox
 
     def sample_free(self, t):
         """
@@ -85,6 +137,17 @@ class SearchSpace(object):
             x.append(self.gen_car_ptns(curr,t))
             curr = curr + u * (t-t1)
         x.append(self.gen_car_ptns(end,t2))
+
+    def collision_free_prox(self, start, end, t1, steps):
+        '''
+        check if line segments encounters a min prox
+        start: vertex at begining of the segment
+        end: vertex at the end of the segment
+        t1: starting time
+        steps: time steps to new goal
+        '''
+        t2 = t1 + steps
+        
 
         for x_ in x:
             if not self.obstacle_free(x_):

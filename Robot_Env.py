@@ -22,8 +22,10 @@ vel_prox = 0.5
 # Controller gains
 tau_max = 30 #J*rad/s^2, J = 1
 damping = tau_max*.8
-P = 10.0
-D = 5.0
+P = 500
+D = 0
+P_v = 10.0
+D_v = 5.0
 jnt_vel_max = np.pi # rad/s
 j_max = tau_max/dt # maximum allowable jerk on the joints
 
@@ -124,6 +126,9 @@ def gen_rand_pos(quad): #,high):
     
     return goal 
 
+def calc_clip_vel(prox):
+    return jnt_vel_max * (1 - np.exp(-(2/3)*(prox-min_prox)/(vel_prox-min_prox)**2))
+
 class PDControl():
     def __init__(self, P=P, D=D, tau_max=tau_max, dt=dt, damping=damping):
         self.P = P
@@ -135,10 +140,25 @@ class PDControl():
         self.dt = dt
 
     def step(self, jnt_err):
-        dedt = (jnt_err - self.prev_jnt_err)/self.dt
+        dedt = (jnt_err - self.jnt_err)/self.dt
         self.jnt_err = jnt_err
         tau = self.P*self.jnt_err + self.D*dedt
         tau = np.clip(tau, -self.tau_mx, self.tau_mx)
+        return tau, dedt
+
+class VelControl():
+    def __init__(self, P=P_v, D=D_v, tau_max=tau_max,dt=dt):
+        self.P = P
+        self.D = D
+        self.vel_err = np.array([0,0,0])
+        self.tau_max = tau_max
+        self.dt = dt
+
+    def step(self, vel_err):
+        dedt = (vel_err - self.vel_err)
+        self.vel_err = vel_err
+        tau = self.P*self.vel_err + self.D*dedt
+        tau = np.clip(tau, -self.tau_max, self.tau_max)
         return tau, dedt
 
 class action_space():
@@ -157,7 +177,8 @@ class observation_space():
 
 class RobotEnv(object):
     # have to generate random poses
-    def __init__(self, eval=False, has_objects=True, close_by=False, ds = .1, num_obj=3):
+    def __init__(self, eval=False, has_objects=True, close_by=False, ds = .1, num_obj=3,
+                    start=None, goal=None):
         self.robot = Robot.robot_3link()
 
         if has_objects:
@@ -172,6 +193,7 @@ class RobotEnv(object):
         self.observation_space = observation_space()
         self.reward_range = [0, -np.inf]
         self.Controller = PDControl(dt=dt)
+        self.vel_control = VelControl(dt=dt)
         self.eval = eval
         self.has_objects = has_objects
         self.close_by = close_by
@@ -179,35 +201,41 @@ class RobotEnv(object):
 
         # setting runtime variables 
         # setting start and end positions
-        quad1 = rng.choice(np.array([1,2,3,4]))
-        s = gen_rand_pos(quad1)
-        if self.close_by:
-            g = gen_rand_pos(quad1)
+        if isinstance(start, np.ndarray):
+            # define start and end goals
+            self.start = start
+            self.goal = goal
         else:
-            quad2 = rng.choice(np.array([1,2,3,4]))
-            while quad1 == quad2:
+            # define random goal
+            quad1 = rng.choice(np.array([1,2,3,4]))
+            s = gen_rand_pos(quad1)
+            if self.close_by:
+                g = gen_rand_pos(quad1)
+            else:
                 quad2 = rng.choice(np.array([1,2,3,4]))
-            g = gen_rand_pos(quad2)
+                while quad1 == quad2:
+                    quad2 = rng.choice(np.array([1,2,3,4]))
+                g = gen_rand_pos(quad2)
 
-        # get a joint position that doesn't have a collison
-        rand_int = rng.choice([0,1])
-        th_arr = self.robot.reverse(goal=g)
-        self.goal = angle_calc(th_arr[:,rand_int])
-        self.robot.set_pose(self.goal)
-        if self.robot.check_safety():
-            rand_int = (rand_int+1)%2
+            # get a joint position that doesn't have a collison
+            rand_int = rng.choice([0,1])
+            th_arr = self.robot.reverse(goal=g)
             self.goal = angle_calc(th_arr[:,rand_int])
-        # get a joint position that doesn't have a collison
-        rand_int = rng.choice([0,1])
-        th_arr = self.robot.reverse(goal=s)
-        self.start = th_arr[:,rand_int]
-        self.robot.set_pose(self.start)
-        if self.robot.check_safety():
-            rand_int = (rand_int+1)%2
+            self.robot.set_pose(self.goal)
+            if self.robot.check_safety():
+                rand_int = (rand_int+1)%2
+                self.goal = angle_calc(th_arr[:,rand_int])
+            # get a joint position that doesn't have a collison
+            rand_int = rng.choice([0,1])
+            th_arr = self.robot.reverse(goal=s)
             self.start = th_arr[:,rand_int]
             self.robot.set_pose(self.start)
+            if self.robot.check_safety():
+                rand_int = (rand_int+1)%2
+                self.start = th_arr[:,rand_int]
+                self.robot.set_pose(self.start)
 
-        # goal = np.array([-.3,-.3,.2])
+        # goal = np.array([-.3,-.3,.2])*
         # th = self.robot.reverse(goal=goal)
         # self.start = th[:,1]
         # self.robot.set_pose(self.start)
@@ -243,7 +271,7 @@ class RobotEnv(object):
 
     # need to return the relative positions of the object and the relative vels
     # in terms of the end effector frame of reference.
-    def step(self, action, use_PID=False, eval=False):
+    def step(self, action, use_PID=False, eval=False, use_VControl=False, w=None):
         self.t_count += 1
         # stopping the robot is object is too close
         paused = False
@@ -259,7 +287,7 @@ class RobotEnv(object):
 
         # scaling velocity based on proximity 
         if prox <= (vel_prox):
-            clip_val = jnt_vel_max * (1 - np.exp(-(2/3)*(prox-min_prox)/(vel_prox-min_prox)**2))
+            clip_val = calc_clip_vel(prox)
         else:
             clip_val = jnt_vel_max
 
@@ -269,6 +297,8 @@ class RobotEnv(object):
         if not paused:
             if use_PID:
                 tau, dedt = self.Controller.step(self.jnt_err)
+            elif use_VControl:
+                tau, dedt = self.vel_control.step(w - self.robot.jnt_vel)
             else:
                 if not isinstance(action,np.ndarray):
                     action = action.cpu()
@@ -302,10 +332,10 @@ class RobotEnv(object):
         if self.t_sum > t_limit:
             done = True
             # bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err))
-        elif np.all(abs(self.jnt_err) < thres): #and np.all(abs(self.jnt_err_vel) < vel_thres): 
+        elif np.all(abs(self.jnt_err) < thres) and np.all(abs(self.jnt_err_vel) < vel_thres): 
             done = True 
             bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err)-np.dot(self.jnt_err_vel, self.jnt_err_vel))
-            # print('finished by converging!!')
+            print('finished by converging!!')
         else:
             done = False
 
@@ -331,7 +361,7 @@ class RobotEnv(object):
             coords = np.vstack(coords)
             feats = np.vstack(feats)
         state = (coords,feats,self.robot.pos,self.goal)
-        if use_PID:
+        if use_PID or use_VControl:
             self.info = {'tau': tau}
         return state, reward, done, self.info
 

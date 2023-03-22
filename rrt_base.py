@@ -4,7 +4,7 @@ from rtree import index
 from search_space import SearchSpace
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
-from Robot_Env import dt, j_max, tau_max, jnt_vel_max
+from Robot_Env import dt, j_max, tau_max, jnt_vel_max, calc_clip_vel
 
 def steer(th1, th2, d):
     start, end = np.array(th1),np.array(th2)

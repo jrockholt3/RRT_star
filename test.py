@@ -51,9 +51,39 @@ env = Robot_Env.RobotEnv()
 
 from Robot_Env import dt, tau_max, j_max as J, jnt_vel_max
 
-T = 4*dt
-print('current search radius is', T*jnt_vel_max)
+# T = 4*dt
+# print('current search radius is', T*jnt_vel_max)
 
-r = -(J/6)*(T/2)**3 + (J*T/4)*(T/4)**2 + (J*T/12)*(T/2) + J*T**3/12
+# r = -(J/6)*(T/2)**3 + (J*T/4)*(T/4)**2 + (J*T/12)*(T/2) + J*T**3/12
 
-print('Jmx search radius is', r)
+# print('Jmx search radius is', r)
+
+env = Robot_Env.RobotEnv(has_objects=False)
+
+done = False
+th = []
+w = []
+tau = []
+start = np.zeros(3)
+goal = start + np.pi/4
+g = []
+env = Robot_Env.RobotEnv(has_objects=True, start=start, goal=goal)
+while not done:
+    _,_,done,info = env.step(np.zeros(3),eval=True, use_VControl=True, w=np.ones(3)*Robot_Env.jnt_vel_max/6)
+    tau.append(info['tau'])
+    th.append(env.robot.pos)
+    w.append(env.robot.jnt_vel)
+    g.append(goal)
+
+
+fig1 = plt.figure()
+plt.plot(np.arange(len(w)), w)
+plt.title('Velocity')
+fig2 = plt.figure()
+plt.plot(np.arange(len(th)), th)
+plt.plot(np.arange(len(g)), g)
+plt.title('Ang_Pos')
+fig3 = plt.figure()
+plt.plot(np.arange(len(tau)), tau)
+plt.title('Tau')
+plt.show()
