@@ -4,7 +4,7 @@ from math import atan2
 from Object_v2 import rand_object
 # import torch 
 from Robot3D import workspace_limits
-
+from rrt_base import vertex
 # global variables
 dt = 0.016 # time step
 t_limit = 4 # time limit in seconds
@@ -250,27 +250,13 @@ class RobotEnv(object):
         self.jnt_err_vel = np.array([0,0,0])
         self.prev_tau = np.array([0,0,0])
 
-    def reward_replay(self, jnt_pos, new_jnt_pos, goal):
-        jnt_err = calc_jnt_err(jnt_pos,goal)
-        new_jnt_err = calc_jnt_err(new_jnt_pos,goal)
-        jnt_err_vel = (new_jnt_err - jnt_err)/dt
-
-        self.robot.set_pose(new_jnt_pos)
-        violation = self.robot.check_safety()
+    def env_replay(self, start_v:vertex, th_goal, X, steps):
+        self.robot.set_pose(start_v.th)
+        self.robot.set_jnt_vel(start_v.w)
+        self.start = start_v.th
+        self.goal = th_goal
         
-        bonus = 0
-        safety_bonus = 0
-        done = False
-        if np.all(abs(jnt_err) < thres):
-            done = True
-            bonus = 2*np.exp(-np.dot(new_jnt_err, new_jnt_err) - np.dot(jnt_err_vel, jnt_err_vel))
-            
-        reward = scale*(-1) + bonus + safety_bonus
 
-        return reward, done
-
-    # need to return the relative positions of the object and the relative vels
-    # in terms of the end effector frame of reference.
     def step(self, action, use_PID=False, eval=False, use_VControl=False, w=None):
         self.t_count += 1
         # stopping the robot is object is too close

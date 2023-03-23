@@ -138,22 +138,6 @@ class SearchSpace(object):
             curr = curr + u * (t-t1)
         x.append(self.gen_car_ptns(end,t2))
 
-    def collision_free_prox(self, start, end, t1, steps):
-        '''
-        check if line segments encounters a min prox
-        start: vertex at begining of the segment
-        end: vertex at the end of the segment
-        t1: starting time
-        steps: time steps to new goal
-        '''
-        t2 = t1 + steps
-        
-
-        for x_ in x:
-            if not self.obstacle_free(x_):
-                return False
-        return True
-
     def sample(self):
         """
         Return a random joint position
