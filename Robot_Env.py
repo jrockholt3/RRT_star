@@ -4,7 +4,7 @@ from math import atan2
 from Object_v2 import rand_object
 # import torch 
 from Robot3D import workspace_limits
-from support_classes import vertex
+from rrt_base import vertex
 # global variables
 dt = 0.016 # time step
 t_limit = 4 # time limit in seconds
@@ -218,24 +218,21 @@ class RobotEnv(object):
                 g = gen_rand_pos(quad2)
 
             # get a joint position that doesn't have a collison
-            rand_int = 0 #rng.choice([0,1])
+            rand_int = rng.choice([0,1])
             th_arr = self.robot.reverse(goal=g)
             self.goal = angle_calc(th_arr[:,rand_int])
             self.robot.set_pose(self.goal)
             if self.robot.check_safety():
-                g = gen_rand_pos(quad2)
-                th_arr = self.robot.reverse(goal=g)
+                rand_int = (rand_int+1)%2
                 self.goal = angle_calc(th_arr[:,rand_int])
             # get a joint position that doesn't have a collison
-            # rand_int = rng.choice([0,1])
+            rand_int = rng.choice([0,1])
             th_arr = self.robot.reverse(goal=s)
             self.start = th_arr[:,rand_int]
             self.robot.set_pose(self.start)
             if self.robot.check_safety():
-                # rand_int = (rand_int+1)%2
-                s = gen_rand_pos(quad1)
-                th_arr = self.robot.reverse(goal=s)
-                self.start = angle_calc(th_arr)
+                rand_int = (rand_int+1)%2
+                self.start = th_arr[:,rand_int]
                 self.robot.set_pose(self.start)
 
         # goal = np.array([-.3,-.3,.2])*
@@ -253,54 +250,22 @@ class RobotEnv(object):
         self.jnt_err_vel = np.array([0,0,0])
         self.prev_tau = np.array([0,0,0])
 
-    def env_replay(self, start_v:vertex, th_goal, obs_dict, steps):
-        '''
-        input
-        start_v: a vertex describing starting position and velocity
-        th_gaol: np.array [th1,th2,th3], a sampled position in the joint space
-        obs_arr: dictionary of object position, t=key, entries = np.array of n positions 3xn
-        steps: amount of times steps to look ahead - if a goal is reached in less time steps stops
-        '''
-        # setting state variables
+    def env_replay(self, start_v:vertex, th_goal, X, steps):
         self.robot.set_pose(start_v.th)
         self.robot.set_jnt_vel(start_v.w)
-        self.start = np.array(start_v.th)
+        self.start = start_v.th
         self.goal = th_goal
-        self.jnt_err = calc_jnt_err(self.start, self.goal)
-        self.t_count = start_v.t
-
-        # score = 0
-        done = False
-        t=start_v.t
-        if t >= t_limit/dt:
-            reward = -np.inf
-            return self.robot.pos, self.robot.jnt_vel, reward, t, False
-        while not done and t<start_v.t + steps and t < t_limit/dt:
-            _, reward, done, info = self.step(np.zeros(3), use_PID=True, eval=True, obs_arr=obs_dict[t],use_v_thres=False)
-            # score += reward
-            t+=1
-
         
-        return self.robot.pos, self.robot.jnt_vel, reward, t, True
 
-
-    def step(self, action, use_PID=False, eval=False, use_VControl=False, w=None, obs_arr=None, use_v_thres=True):
+    def step(self, action, use_PID=False, eval=False, use_VControl=False, w=None):
         self.t_count += 1
         # stopping the robot is object is too close
         paused = False
         prox = np.inf
-        if isinstance(obs_arr, np.ndarray):
-            # passing in pre-defined obs pos
-            for i in range(0,obs_arr.shape[1]):
-                temp = np.min(self.robot.proximity(obs_arr[:,i]))
-                if temp<prox:
-                    prox = temp
-        else:
-            for o in self.objs:
-                temp = np.min(self.robot.proximity(o.curr_pos)[1:3])
-                if temp < prox:
-                    prox = temp
-                o.step()
+        for o in self.objs:
+            temp = np.min(self.robot.proximity(o.curr_pos)[1:3])
+            if temp < prox:
+                prox = temp
         
         # stoping the robot is minimum proximity is reached (aka collison)
         if prox <= min_prox:
@@ -330,7 +295,7 @@ class RobotEnv(object):
             self.prev_tau = tau
             nxt_vel = (tau-damping*self.robot.jnt_vel)*dt + self.robot.jnt_vel
             nxt_vel = np.clip(nxt_vel, -clip_val, clip_val)
-            nxt_pos = angle_calc((tau-damping*self.robot.jnt_vel) * (dt**2/2) + self.robot.jnt_vel*dt + self.robot.pos)
+            nxt_pos = angle_calc(dt * nxt_vel + self.robot.pos)
             
             self.robot.set_jnt_vel(nxt_vel)
             self.robot.set_pose(nxt_pos)
@@ -343,23 +308,20 @@ class RobotEnv(object):
             self.robot.set_jnt_vel(np.array([0,0,0]))
             self.jnt_err_vel = np.array([0,0,0])
 
+        # update objects
+        for o in self.objs:
+            o.step()
+
         # check for termination, update bonus and reward
         bonus = 0
-        done = False
-        self.t_sum = self.t_count*dt
-        if self.t_sum >= t_limit:
+        self.t_sum += dt
+        if self.t_sum > t_limit:
             done = True
             # bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err))
-        elif np.all(abs(self.jnt_err) < thres):
-            if use_v_thres:
-                if np.all(abs(self.jnt_err_vel) < vel_thres): 
-                    done = True 
-                    bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err)-np.dot(self.jnt_err_vel, self.jnt_err_vel))
-                    # print('finished by converging!!')
-            else:
-                done = True 
-                bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err)-np.dot(self.jnt_err_vel, self.jnt_err_vel))
-                # print('finished w/out vel')
+        elif np.all(abs(self.jnt_err) < thres) and np.all(abs(self.jnt_err_vel) < vel_thres): 
+            done = True 
+            bonus = 2*np.exp(-np.dot(self.jnt_err,self.jnt_err)-np.dot(self.jnt_err_vel, self.jnt_err_vel))
+            print('finished by converging!!')
         else:
             done = False
 
@@ -369,7 +331,7 @@ class RobotEnv(object):
         #     done = True
 
         # reward = -Alpha * np.sum(np.abs(self.jnt_err)) + bonus 
-        reward = -np.linalg.norm(self.jnt_err) 
+        reward = scale*(-1) - safety_bonus + bonus 
 
         # collecting point cloud data and creating state
         coords = []

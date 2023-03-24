@@ -1,6 +1,7 @@
 import numpy as np
 from rtree import index
 from Robot_Env import RobotEnv, dt, t_limit, min_prox
+import Robot_Env
 import uuid
 
 def gen_obstacles(env:RobotEnv, obs_index:index.Index):
@@ -9,9 +10,9 @@ def gen_obstacles(env:RobotEnv, obs_index:index.Index):
     each time step
     '''
     objs = env.objs.copy()
-    dt = dt
-    t_limit = t_limit
-    min_prox = min_prox
+    dt = Robot_Env.dt
+    t_limit = Robot_Env.t_limit
+    min_prox = Robot_Env.min_prox
     obs = []
 
     t = 0
@@ -44,8 +45,7 @@ def gen_obs_pos(obj_list):
             center = o.curr_pos
             temp[:,i] = center
             o.step()
-            i+=1
-        obs_dict[t] = temp.copy()
+        obs_dict[t] = temp
         t+=1
     
     return obs_dict
@@ -62,7 +62,7 @@ class SearchSpace(object):
         # gen_obstacles(env,obs)
         # self.obs = obs
 
-        self.obs_pos = gen_obs_pos(env.objs)
+        self.obs_pos = gen_obs_pos(env.objs.copy())
 
         self.jnt_max = env.robot.jnt_max.copy()
         self.jnt_min = env.robot.jnt_min.copy()
