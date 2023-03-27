@@ -65,13 +65,14 @@ max_iter = 5
 i = 0
 while len(path)==0 and i < max_iter:
     env = RobotEnv()
+    global_goal = env.goal.copy()
     X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
     start = tuple(env.start)
     goal = tuple(env.goal)
-    r = jnt_vel_max*dt*10
-    max_samples = int(2000)
+    r = jnt_vel_max*dt*3
+    max_samples = int(5000)
 
-    rrt = RRT_star(X, start, goal, max_samples, r,n=10)
+    rrt = RRT_star(X, start, goal, max_samples, r,n=5,steps=8)
     path = rrt.rrt_search()
     obs = rrt.get_obs()
 
@@ -95,18 +96,17 @@ for tup in path: # tup = (t, th, targ)
         temp = np.array(temp)
     env.goal = temp
     env.jnt_err = Robot_Env.calc_jnt_err(env.robot.pos, env.goal)
-    print('tup[2]', tup[2], 'env.goal', env.goal)
     segment_complete=False
     while not segment_complete and env.t_count < Robot_Env.t_limit/Robot_Env.dt:
         obs_arr = obs[env.t_count]
         _, reward, _, _ = env.step(np.zeros(0), use_PID=True, eval=True, obs_arr=obs_arr)
         score += reward
 
-        if env.t_count == tup[0]:
+        if env.t_count >= tup[0]:
             segment_complete = True
 
         temp = env.robot.forward()
-        temp2 = env.robot.forward(th=env.goal)
+        temp2 = env.robot.forward(th=global_goal)
         temp = np.hstack((temp, temp2))
         x_arr.append(temp[0,:])
         y_arr.append(temp[1,:])

@@ -4,8 +4,9 @@ from rrt_base import RRTBase, vertex
 import numpy as np
 
 class RRT_star(RRTBase):
-    def __init__(self, X, start, goal, max_samples, r):
-
+    def __init__(self, X, start, goal, max_samples, r, n=5, steps=5):
+        self.n = n
+        self.steps = steps
         super().__init__(X, start, goal, max_samples, r)
 
     def rrt_search(self):
@@ -16,14 +17,32 @@ class RRT_star(RRTBase):
         loop_count = 0
         path = []
         while not converged:
-            th_new, v_nearest = self.new_and_near()
-
-            if th_new is None:
+            # sample a new node
+            th_new = self.X.sample()
+            # find n nearest nodes
+            near = self.nearby(th_new, self.n)
+            # try to reach new node from nearby nodes
+            v_new = []
+            for v in near:
+                th_fin, w_fin, reward, t_fin, flag = self.X.env.env_replay(v, th_new, self.X.obs_pos, self.steps)
+                if flag:
+                    v_new.append((v,vertex(tuple(th_fin),t_fin,w=w_fin,reward=reward, targ=th_new)))
+            # add the node with the best reward
+            if len(v_new) == 0:
                 continue
-            
-            new_v = vertex(th_new)
-            flag = self.connect_to_point(v_nearest, new_v)
-            # flag = self.connect_with_pateince(v_nearest, new_v, 10)
+            (parent,v_best) = v_new.pop()
+            best = np.linalg.norm(th_new - np.array(v_best.th))
+            # best = v_best.reward
+            for tup in v_new:
+                p,v = tup[0],tup[1]
+                err = np.linalg.norm(th_new - np.array(v.th))
+                if err < best: # v.reward > best:
+                    v_best = v
+                    parent = p
+                    best = np.linalg.norm(th_new - np.array(v_best.th))
+                    # best = v.reward
+            self.add_vertex(v_best)
+            self.add_edge(v_best, parent)
 
             loop_count += 1
             if loop_count%100 == 0:
@@ -47,16 +66,16 @@ class RRT_star(RRTBase):
 
 
 
+# env = RobotEnv()
+# X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
+# start = tuple(env.start)
+# goal = tuple(env.goal)
+# print('goal', goal)
+# r = jnt_vel_max*dt*10
+# max_samples = int(2000)
 
-# testing
-env = RobotEnv()
-print(tuple(env.robot.jnt_max))
-X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
-start = tuple(env.start)
-goal = tuple(env.goal)
-r = jnt_vel_max*dt*10
-max_samples = int(5e3)
-
-rrt = RRT_star(X, start, goal, max_samples, r)
-path = rrt.rrt_search()
-rrt.plot_graph(add_path=True, path=path)
+# rrt = RRT_star(X, start, goal, max_samples, r,n=10)
+# path = rrt.rrt_search()
+# obs = rrt.get_obs()
+# # rrt.plot_graph()
+# print(path)
