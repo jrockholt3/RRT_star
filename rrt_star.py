@@ -9,6 +9,20 @@ class RRT_star(RRTBase):
         self.steps = steps
         super().__init__(X, start, goal, max_samples, r)
 
+    def cost_replan(self, v:vertex):
+        """
+        Go to root - generate a list of target and times along the way
+        Edit the nodes along the path
+         - remove the keys of the recalcuated nodes but have to still have them connected to thier children.. 
+        """
+        # go to root
+        # generate targets and times
+        # remove all nodes
+        # travel to first target 
+        # - add up cost
+        # - 
+        # replay path adding up costs along the way. 
+
     def rrt_search(self):
         v = vertex(self.start, 0)
         self.add_vertex(v)
@@ -24,9 +38,10 @@ class RRT_star(RRTBase):
             # try to reach new node from nearby nodes
             v_new = []
             for v in near:
-                th_fin, w_fin, reward, t_fin, flag = self.X.env.env_replay(v, th_new, self.X.obs_pos, self.steps)
-                if flag:
-                    v_new.append((v,vertex(tuple(th_fin),t_fin,w=w_fin,reward=reward, targ=th_new)))
+                if v.t < 250:
+                    th_fin, w_fin, reward, t_fin, flag = self.X.env.env_replay(v, th_new, self.X.obs_pos, self.steps)
+                    if flag:
+                        v_new.append((v,vertex(tuple(th_fin),t_fin,w=w_fin,reward=reward, targ=th_new)))
             # add the node with the best reward
             if len(v_new) == 0:
                 continue
@@ -71,10 +86,11 @@ X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
 start = tuple(env.start)
 goal = tuple(env.goal)
 print('goal', goal)
-r = jnt_vel_max*dt*3
+steps=20
+r = jnt_vel_max*dt*10
 max_samples = int(10000)
 
-rrt = RRT_star(X, start, goal, max_samples, r,n=10)
+rrt = RRT_star(X, start, goal, max_samples, r,n=10,steps=steps)
 path = rrt.rrt_search()
 obs = rrt.get_obs()
 rrt.plot_graph()
