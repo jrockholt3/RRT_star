@@ -1,70 +1,16 @@
 import random 
 import numpy as np
-from rtree import index
 from search_space import SearchSpace
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 from Robot_Env import dt, j_max, tau_max, jnt_vel_max, calc_clip_vel
+from support_classes import vertex, Tree
 
 def steer(th1, th2, d):
     start, end = np.array(th1),np.array(th2)
     v = (end - start) / np.linalg.norm(end - start)
     steered_ptn = start + v*d
     return tuple(steered_ptn)
-
-class vertex(object):
-    def __init__(self, th, t = 0):
-        self.th = th # (th1,th2,th3) tuple
-        self.t = t
-        self.cost = 0
-        self.w = np.zeros_like(self.th)
-        self.tau = np.zeros_like(self.th)
-
-    def r_max(self, th2, steps):
-        '''
-        th2 = next goal pose (th1,th2,th3) as a tuple 
-        returns: maximum distance along (th2-th1) vector based on max jerk
-        '''
-        th2 = np.array(th2)
-        t = steps * dt
-        # maximum reachable change based on max jerk
-        J = (th2 - (self.tau * (t**2/2) + self.w * (t) + self.th)) / (t**3/6)
-        J = np.clip(J, -j_max, j_max)
-        temp = J * (t**3/6) + self.tau * (t**2/2) + self.w * t + self.th
-        r_max_j = np.linalg.norm(temp - self.th)
-        # max reachable change based on max torque
-        tau = (th2 - self.th1 - self.w*t) / (t**2/2)
-        tau = np.clip(tau, -tau_max, tau_max)
-        temp = tau*(t**2/2) + self.w*t + self.th
-        r_max_tau = np.linalg.norm(temp - self.th)
-        # max reachable change based on max velocity
-        w = (th2 - self.th)/t
-        w = np.clip(w, -jnt_vel_max, jnt_vel_max)
-        temp = w*t + self.th
-        r_max_w = np.linalg.norm(temp - self.th)
-        return np.min([r_max_j, r_max_tau, r_max_w])
-    
-    def stoping_point(self):
-        '''
-        Return the position the arm would be after an emergency stop
-        '''
-
-
-
-class Tree(object):
-    def __init__(self, dims):
-        '''
-        Tree 
-        dims: dimension of storage space
-        X: search space
-        V: joint-space spatial storage of vertex's
-        E: dictionary of edges 
-        '''
-        p = index.Property()
-        p.dimension = dims
-        self.V = index.Index(interleaved=True, properties=p)
-        self.V_count = 0
-        self.E = {}
 
 class RRTBase(object):
     def __init__(self, X:SearchSpace, start, goal, max_samples, r, prc=0.01):
@@ -155,12 +101,11 @@ class RRTBase(object):
         if self.goal in self.tree.E and v_nearest.th in self.tree.E[self.goal]:
             # goal is already connected 
             return True
-        if self.X.collision_free(v_nearest.th, self.goal, v_nearest.t, v_nearest.t+1):
-            if np.linalg.norm(np.array(v_nearest.th) - self.goal) <= self.r:
-                v_goal = vertex(self.goal, v_nearest.t+1)
-                self.add_vertex(v_goal)
-                self.add_edge(v_goal, v_nearest)
-                return True
+        if np.linalg.norm(np.array(v_nearest.th) - self.goal) <= self.r:
+            v_goal = vertex(self.goal, v_nearest.t+1)
+            self.add_vertex(v_goal)
+            self.add_edge(v_goal, v_nearest)
+            return True
         return False
 
     def connect_with_pateince(self, tries):
@@ -180,19 +125,24 @@ class RRTBase(object):
         start: (th1, th2, th3)
         goal: (th1, th2, th3)
         '''
-        path = [goal]
+        # path = [goal]
+        path = []
         curr = goal
         if start == goal:
             return path
         parent = self.tree.E[curr]
         while not parent.th == start:
-            path.append(parent.th)
+            path.append((parent.t,parent.th,parent.targ))
             curr = parent.th
             parent = self.tree.E[curr]
+        path.append((0,start,np.zeros(3)))
 
-        path.append(start)
         path.reverse() 
+        
         return path
+
+    def get_obs(self):
+        return self.X.obs_pos
 
     def plot_graph(self, add_path=False, path=None):
         th_arr = []

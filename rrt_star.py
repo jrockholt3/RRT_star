@@ -1,5 +1,5 @@
 from search_space import SearchSpace
-from Robot_Env import RobotEnv, dt, t_limit, jnt_vel_max
+from Robot_Env_v2 import RobotEnv, dt, t_limit, jnt_vel_max
 from rrt_base import RRTBase, vertex
 import numpy as np
 
@@ -66,16 +66,15 @@ class RRT_star(RRTBase):
 
 
 
-# env = RobotEnv()
-# X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
-# start = tuple(env.start)
-# goal = tuple(env.goal)
-# print('goal', goal)
-# r = jnt_vel_max*dt*10
-# max_samples = int(2000)
+env = RobotEnv()
+X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
+start = tuple(env.start)
+goal = tuple(env.goal)
+print('goal', goal)
+r = jnt_vel_max*dt*3
+max_samples = int(10000)
 
-# rrt = RRT_star(X, start, goal, max_samples, r,n=10)
-# path = rrt.rrt_search()
-# obs = rrt.get_obs()
-# # rrt.plot_graph()
-# print(path)
+rrt = RRT_star(X, start, goal, max_samples, r,n=10)
+path = rrt.rrt_search()
+obs = rrt.get_obs()
+rrt.plot_graph()

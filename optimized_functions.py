@@ -1,32 +1,32 @@
-from numba import njit, int32, float64
+from numba import njit, jit, int32, float64
 import numpy as np
-from env_config import dt, t_limit, thres, vel_thres, jnt_vel_max, min_prox, vel_prox, prox_thres, damping as Z
+from env_config import dt, t_limit, thres, vel_thres, jnt_vel_max, min_prox, vel_prox, prox_thres, damping as Z, P, D, tau_max
 from Robot3D import robot_3link
 robot = robot_3link()
 jnt_max = robot.jnt_max
 jnt_min = robot.jnt_min
 
-@njit((float64[:])(float64, float64, float64, float64), nogil=True)
+@njit((float64[:,:])(float64, float64, float64, float64), nogil=True)
 def T_ji(thj, aij, lij, Sj):
-    return np.array([[np.cos(thj),                        -np.sin(thj),            0,              lij],
+    return np.array([[np.cos(thj),-np.sin(thj),0,lij],
                      [np.sin(thj)*np.cos(aij), np.cos(thj)*np.cos(aij), -np.sin(aij), -np.sin(aij)*Sj],
                      [np.sin(thj)*np.sin(aij), np.cos(thj)*np.sin(aij),  np.cos(aij),  np.cos(aij)*Sj],
                      [                    0.0,                     0.0,          0.0,             1.0]])
 
-@njit((float64[:])(float64),nogil=True)
-def T_1F(ph, S):
-    return np.array([[np.cos(ph), -np.sin(ph), 0, 0],
-                     [np.sin(ph),  np.cos(ph), 0, 0],
-                     [    0,      0, 1, S], 
-                     [    0,      0, 0, 1]])
+@njit((float64[:,:])(float64,float64),nogil=True)
+def T_1F(ph, Sj):
+    return np.array([[np.cos(ph), -np.sin(ph), 0.0, 0.0],
+                    [np.sin(ph), np.cos(ph), 0.0, 0.0],
+                    [0.0, 0.0, 1.0, Sj],
+                    [0.0, 0.0, 0.0, 1.0]])
 
-@njit((float64[:])(float64[:]),nogil=True)
+@njit((float64[:,:])(float64[:,:]),nogil=True)
 def T_inverse(T):
     R = T[0:3,0:3].T
 #     print(R)
-    shift = T[0:3,3]
+    temp = T[0:3,3]
 #     print('shift ' + str(shift))
-    shift = -R@shift
+    shift = -1*(R@temp)
 #     print('-shift ' + str(shift))
     new_T = np.zeros((4,4))
     for i in range(0,3):
@@ -35,66 +35,84 @@ def T_inverse(T):
     for i in range(0,3):
         new_T[i,3] = shift[i]
     new_T[3,3] = 1
+    return new_T
 
-@njit((float64[:])(float64[:]),nogil=True)
-def T_inverse(T):
-    R = T[0:3,0:3].T
-#     print(R)
-    shift = T[0:3,3]
-#     print('shift ' + str(shift))
-    shift = -R@shift
-#     print('-shift ' + str(shift))
-    new_T = np.zeros((4,4))
-    for i in range(0,3):
-        for j in range(0,3):
-            new_T[i,j] = R[i,j]
-    for i in range(0,3):
-        new_T[i,3] = shift[i]
-    new_T[3,3] = 1
 
-@njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
+@njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def asb_link2(obj_pos, th, a, l, S):
-    _2toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[1],a[0],l[0],S[1])
-    inv_T = T_inverse(_2toF)
+    T_2toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[1],a[0],l[0],S[1])
+    inv_T = T_inverse(T_2toF)
     vec = np.array([obj_pos[0],obj_pos[1],obj_pos[2],1])
     return inv_T@vec
 
 @njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def asb_link3(obj_pos, th, a, l, S):
-    _3toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])
-    inv_T = T_inverse(_3toF)
+    T_3toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])
+    inv_T = T_inverse(T_3toF)
     vec = np.array([obj_pos[0],obj_pos[1],obj_pos[2],1])
     return inv_T@vec
 
 @njit((float64)(float64[:],float64[:],float64[:],float64[:],float64[:]))
 def proximity(obj_pos, th, a, l, S):
-    obj_i = obj_pos[:,i]
-    asb_l2 = asb_link2(obj_i,th,a,l,S)
-    asb_l3 = asb_link3(obj_i,th,a,l,S)
-    obj_arr = np.array([asb_l2[0:3], asb_l3[0:3]])
-    min_prox = np.inf
-    for i in range(0,2):
-        obj_i = obj_arr[:,i]
-        if obj_i[0] <= 0.0:
-            prox = np.linalg.norm(obj_i)
-        elif obj_i[0] >= l[i+1]:
-            prox = np.linalg.norm(obj_i)
-        else:
-            prox = np.linalg.norm(obj_i[1:3])
-        if min_prox > prox:
-            min_prox = prox
+    asb_l2 = asb_link2(obj_pos,th,a,l,S)
+    asb_l3 = asb_link3(obj_pos,th,a,l,S)
+    prox1 = 0.0
+    if asb_l2[0] <= 0.0:
+        prox1 = np.linalg.norm(asb_l2)
+    elif asb_l2[0] >= l[0]:
+        prox1 = np.linalg.norm(asb_l2)
+    else:
+        prox1 = np.linalg.norm(asb_l2[1:3])
+    
+    prox2 = 0.0
+    if asb_l3[0] <= 0.0:
+        prox2 = np.linalg.norm(asb_l2)
+    elif asb_l3[0] >= l[1]:
+        prox2 = np.linalg.norm(asb_l2)
+    else:
+        prox2 = np.linalg.norm(asb_l2[1:3])
 
-    return min_prox
+    if prox1 < prox2:
+        return prox1
+    else:
+        return prox2
 
 @njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def njit_forward(th, a, l, S, P_3):
     return T_1F(th[0],S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])@P_3    
 
-@njit((float64[:])(float64),nogil=True)
+@njit((float64)(float64),nogil=True)
 def calc_clip_vel(prox):
     return jnt_vel_max * (1 - np.exp(-(2/3)*(prox-min_prox)/(vel_prox-min_prox)**2))
 
-@njit((float64[:],float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
+@njit((float64[:])(float64[:],float64[:]),nogil=True)
+def calc_jnt_err(curr,goal):
+    # first two 
+    s1 = np.sin(curr)
+    c1 = np.cos(curr)
+    curr = np.arctan2(s1,c1)
+    s2 = np.sin(goal)
+    c2 = np.cos(goal)
+    goal = np.arctan2(s2,c2)
+
+    jnt_err = goal - curr
+
+    return jnt_err
+
+@njit((float64[:])(float64[:]))
+def angle_calc(th):
+    s = np.sin(th)
+    c = np.cos(th)
+    arr = np.arctan2(s,c)
+    return arr
+
+@njit((float64[:])(float64[:],float64[:]),nogil=True)
+def PDControl(jnt_err, dedt):
+    tau = P*jnt_err + D*dedt
+    tau = np.clip(tau, -tau_max, tau_max)
+    return tau
+
+@njit((float64[:,:])(float64[:,:],float64[:],float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def nxt_state(obj_pos, th, w, tau, a, l, S):
     '''
     input current state of the robot
@@ -141,6 +159,12 @@ def nxt_state(obj_pos, th, w, tau, a, l, S):
         nxt_th[nxt_th >= jnt_max] = jnt_max[nxt_th >= jnt_max]
         nxt_th[nxt_th <= jnt_min] = jnt_min[nxt_th <= jnt_min]
 
-    return nxt_th, nxt_w
+    package = np.zeros((3,2),dtype=float64)
+    for i in range(0, package.shape[0]):
+        package[i,0] = nxt_th[i]
+
+    for i in range(0, package.shape[0]):
+        package[i,1] = nxt_w[i]
+    return package
 
 
