@@ -41,7 +41,7 @@ def env_replay(th, w, t_start, th_goal, obs_dict, steps):
         elif np.all(abs(jnt_err) < thres): # no termination for vel
             done = True
 
-        score += -np.linalg.norm(jnt_err)
+        score += -1 - np.linalg.norm(jnt_err)
 
     return th, w, score, t, True
 
