@@ -75,15 +75,16 @@ class RRTBase(object):
         return next(self.nearby(th,1))
 
     def steer(self, th1, th2):
-        d = self.r 
-        start, end = np.array(th1),np.array(th2)
-        norm = np.linalg.norm(end - start)
-        if norm >= d:
-            v = (end - start) / norm
-            steered_ptn = start + v*d
-            return tuple(steered_ptn)
-        else:
-            return th2
+        # d = self.r 
+        # start, end = np.array(th1),np.array(th2)
+        # norm = np.linalg.norm(end - start)
+        # if norm >= d:
+        #     v = (end - start) / norm
+        #     steered_ptn = start + v*d
+        #     return tuple(steered_ptn)
+        # else:
+        #     return th2
+        return th2
 
     def new_and_near(self):
         # q = length of edge when steering
@@ -158,14 +159,14 @@ class RRTBase(object):
         '''
         # path = [goal]
         path = []
-        curr = goal
+        curr = self.nearby(goal, n=1)
         if start == goal:
             return path
-        parent = self.tree.E[curr]
+        parent = self.tree.E[curr.id]
         while not parent.th == start:
             path.append((parent.t,parent.th,parent.targ))
             curr = parent.th
-            parent = self.tree.E[curr]
+            parent = self.tree.E[curr.id]
         path.append((0,start,np.zeros(3)))
 
         path.reverse() 
