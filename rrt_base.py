@@ -3,7 +3,9 @@ import numpy as np
 from search_space import SearchSpace
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
-from Robot_Env import dt, j_max, tau_max, jnt_vel_max, calc_clip_vel
+# from Robot_Env import dt, j_max, tau_max, jnt_vel_max, calc_clip_vel
+from env_config import dt, j_max, tau_max, jnt_vel_max
+from Robot_Env_v2 import env_replay
 from support_classes import vertex, Tree
 
 def steer(th1, th2, d):
@@ -30,18 +32,33 @@ class RRTBase(object):
         self.goal = goal
         self.stop = False
         self.tree = Tree(3)
+        self.edge_count = 0
 
     def add_vertex(self, v:vertex):
         """
         insert vertex into tree
         """
-        self.tree.V.insert(0, v.th, obj=v)
+        self.tree.V.insert(v.id, v.th, obj=v)
         self.tree.V_count += 1
         self.sample_count += 1
+    
+    def delete_vertex(self, v:vertex):
+        """
+        deletes the vertex in the index
+        """
+        self.tree.V.delete(v.id, v.th)
+        self.tree.V_count = self.tree.V_count - 1
+        self.sample_count = self.sample_count - 1
 
     def add_edge(self, child:vertex, parent:vertex):
         # connect parent to child
-        self.tree.E[child.th] = parent
+        self.edge_count += 1
+        child.id = self.edge_count
+        self.tree.E[child.id] = parent
+        return child 
+        
+    def init_root(self, start:vertex):
+        self.tree.E[start.id] = start
 
     def nearby(self, th, n):
         '''
@@ -56,6 +73,17 @@ class RRTBase(object):
         return nearest vertex
         """
         return next(self.nearby(th,1))
+
+    def steer(self, th1, th2):
+        d = self.r 
+        start, end = np.array(th1),np.array(th2)
+        norm = np.linalg.norm(end - start)
+        if norm >= d:
+            v = (end - start) / norm
+            steered_ptn = start + v*d
+            return tuple(steered_ptn)
+        else:
+            return th2
 
     def new_and_near(self):
         # q = length of edge when steering
@@ -109,6 +137,9 @@ class RRTBase(object):
         return False
 
     def connect_with_pateince(self, tries):
+        '''
+        Currently not in uses
+        '''
         v_nearest = self.get_nearest(self.goal)
         if np.linalg.norm(np.array(v_nearest.th) - self.goal) <= self.r:
             t = v_nearest.t
@@ -140,6 +171,52 @@ class RRTBase(object):
         path.reverse() 
         
         return path
+    
+    def recalc_path(self, leaf:vertex):
+        '''
+        starts at a leaf then finds all nodes along path to root
+        starting at root, it replays the sequence of targets given by the path
+        once a new th is calculated for a node, that node is returned 
+        '''
+        curr_v = leaf.copy()
+        path = []
+        while not curr_v.th == self.start:
+            path.append(curr_v)
+            curr_v = self.tree.E[curr_v.id]
+        curr_v = self.tree.E[0] # add the root to the path
+        path.append(curr_v)
+        path.reverse
+
+        t = 0 
+        new_path = []
+        curr_v = path.pop()
+        new_path.append(curr_v)
+        while len(path) > 0:
+            nxt_v = path.pop()
+            th = np.array(curr_v.th)
+            steps = nxt_v.t - curr_v.t
+            nxt_th, w, score, t, flag = env_replay(th, curr_v.w, t, curr_v.targ, self.X.obs_pos, steps)
+            nxt_v.th = tuple(nxt_th)
+            nxt_v.w = w
+            nxt_v.reward = score
+            nxt_v.t = t
+            self.tree.E[nxt_v.id] = curr_v # edit the edges
+            self.delete_vertex(nxt_v) # deletes the vertex
+            self.add_vertex(nxt_v) # re-adds the vertex with the new information
+            curr_v = nxt_v 
+
+        if curr_v.id == leaf.id:
+            return curr_v
+        else:
+            return False
+
+    def reward_calc(self, leaf:vertex):
+        curr_v = leaf
+        reward = 0
+        while not curr_v.th == self.start:
+            reward += curr_v.reward
+            curr_v = self.tree.E[curr_v.id]
+        return reward
 
     def get_obs(self):
         return self.X.obs_pos
@@ -149,13 +226,14 @@ class RRTBase(object):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         for k in self.tree.E.keys():
-            arr = np.array(k)
-            th_arr.append(arr)
             parent = self.tree.E[k]
-            xx = np.array([parent.th[0], k[0]])
-            yy = np.array([parent.th[1], k[1]])
-            zz = np.array([parent.th[2], k[2]])
-            ax.plot3D(xx,yy,zz,'k',alpha=.1)
+            arr = np.array(parent.th)
+            th_arr.append(arr)
+            # parent = self.tree.E[k]
+            # xx = np.array([parent.th[0], k[0]])
+            # yy = np.array([parent.th[1], k[1]])
+            # zz = np.array([parent.th[2], k[2]])
+            # ax.plot3D(xx,yy,zz,'k',alpha=.1)
 
         th_arr = np.vstack(th_arr)
         xx = th_arr[:,0]

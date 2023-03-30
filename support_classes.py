@@ -1,9 +1,10 @@
 import random 
 import numpy as np
+from env_config import dt 
 from rtree import index
 
 class vertex(object):
-    def __init__(self, th, t = 0, w=np.zeros(3),reward=0,dt=.016, targ=np.zeros(3)):
+    def __init__(self, th, t = 0, w=np.zeros(3),reward=0,dt=dt, targ=np.zeros(3), id=0):
         self.th = th # (th1,th2,th3) tuple
         self.t = t
         self.reward = reward
@@ -11,7 +12,11 @@ class vertex(object):
         self.tau = np.zeros_like(self.th)
         self.dt = dt
         self.targ = targ
+        self.id = id
 
+    def copy(self):
+        new_v = vertex(self.th, self.t, self.w, self.reward, self.dt, self.targ, self.id)
+        return new_v
     # def r_max(self, th2, steps):
     #     '''
     #     th2 = next goal pose (th1,th2,th3) as a tuple 

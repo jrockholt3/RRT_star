@@ -123,6 +123,7 @@ class SearchSpace(object):
 
     def collision_free(self, start, end, t1, steps):
         """
+        No longer used
         Check if a line segment intersects an obstacle
         :param start: start pose of the robot as a tup
         :param end: ending pose of the robot as a tup
