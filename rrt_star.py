@@ -5,12 +5,14 @@ from support_classes import vertex
 import numpy as np
 
 class RRT_star(RRTBase):
-    def __init__(self, X, start, goal, max_samples, r, n=5, steps=5):
+    def __init__(self, X, start, goal, max_samples, r, d,  thres, n=5, steps=5):
         self.n = n
         self.steps = steps
-        super().__init__(X, start, goal, max_samples, r)
+        self.thres = thres
+        super().__init__(X, start, goal, max_samples, r, d)
 
     def get_reachable(self, v, targ):
+        print(v.t)
         if v.t < t_limit/dt:
             targ_i = self.steer(v.th, targ)
             th_fin, w_fin, reward, t_fin, flag = self.X.env.env_replay(v, targ_i, self.X.obs_pos, self.steps)
@@ -22,40 +24,63 @@ class RRT_star(RRTBase):
         '''
         add node nearest to the target
         '''
-        (parent,v_best) = pv_pairs.pop()
-        best = np.linalg.norm(targ - np.array(v_best.th))
+        # (parent,v_best) = pv_pairs.pop()
+        best = np.inf
         # best = v_best.reward
+        flag = False
         for tup in pv_pairs:
             p,v = tup[0],tup[1]
             err = np.linalg.norm(targ- np.array(v.th))
-            if err < best: # v.reward > best:
-                v_best = v
-                parent = p
-                best = np.linalg.norm(targ- np.array(v_best.th))
-                # best = v.reward
-        child = self.add_edge(v_best, parent)
-        self.add_vertex(child)
-
-        return child 
+            d = np.linalg.norm(np.array(p.th) - np.array(v.th))
+            if d >= self.thres:
+                if err < best: # v.reward > best:
+                    flag = True
+                    v_best = v
+                    parent = p
+                    best = np.linalg.norm(targ- np.array(v_best.th))
+                    # best = v.reward
+        if flag:
+            child = self.add_edge(v_best, parent)
+            self.add_vertex(child)
+            return child, flag
+        else:
+            return None, flag
     
     def add_highest_reward(self, pv_pairs):
         '''
         add the parent-leaf pair with the highest
         reward
         '''
-        (parent,v_best) = pv_pairs.pop()
-        best_reward = self.reward_calc(parent) + v_best.reward
+        flag = False
+        best_reward = -np.inf
         for tup in pv_pairs:
             p,v = tup[0],tup[1]
+            d = np.linalg.norm(np.array(p.th) - np.array(v.th))
             reward = self.reward_calc(p) + v.reward
-            if reward > best_reward:
+            if d >= self.thres and reward > best_reward:
+                flag = True
                 best_reward = reward
                 parent = p
                 v_best = v
         
-        child = self.add_edge(v_best, parent)
-        self.add_vertex(child)
-        return child
+        if flag:
+            child = self.add_edge(v_best, parent)
+            self.add_vertex(child)
+            return child, flag
+        else:
+            return None, flag
+    
+    def add_all(self, pv_pairs):
+        '''
+        add all edges in list
+        '''
+        for tup in pv_pairs:
+            p,v = tup[0],tup[1]
+            d = np.linalg.norm(np.array(p.th) - np.array(v.th))
+            if d >= thres: 
+                child = self.add_edge(v,p)
+                self.add_vertex(child)
+
     
     # def get_v_in_radius(self, v):
     #     min_th = v.th - self.r
@@ -88,6 +113,8 @@ class RRT_star(RRTBase):
         while not converged:
             # sample a new node
             th_new = self.X.sample()
+            if loop_count%100 == 0:
+                th_new = self.goal
             # find n nearest nodes
             near = self.nearby(th_new, self.n)
             # try to reach new node from nearby nodes
@@ -104,8 +131,10 @@ class RRT_star(RRTBase):
             # tests n different nearest nodes to the original target, th_new
             # adds the node that is the clostest to the target reachable
             # from the n_nodes list in v_new
-            v = self.add_nearest(v_new, th_new)
-            # v = self.add_highest_reward(v_new)
+            # v, v_added_flag = self.add_nearest(v_new, th_new)
+            v, v_added_flag = self.add_highest_reward(v_new)
+            # self.add_all(v_new)
+
 
 
             # now we need to rewire the newly added node
@@ -135,16 +164,21 @@ class RRT_star(RRTBase):
 
 
 
-env = RobotEnv()
+env = RobotEnv(num_obj=1)
 X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
 start = tuple(env.start)
 goal = tuple(env.goal)
 print('goal', goal)
-steps = 5
-r = jnt_vel_max*dt*5
+steps = 25
+thres = np.linalg.norm([.003,.003,.003])
+n = 100
+r = np.linalg.norm(jnt_vel_max*dt*steps/5*np.ones(3))
+d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
 max_samples = int(10000)
+print('radius is', r)
+print('min thres is', thres)
 
-rrt = RRT_star(X, start, goal, max_samples, r,n=3,steps=steps)
+rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
 path = rrt.rrt_search()
 obs = rrt.get_obs()
 rrt.plot_graph()

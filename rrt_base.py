@@ -15,7 +15,7 @@ def steer(th1, th2, d):
     return tuple(steered_ptn)
 
 class RRTBase(object):
-    def __init__(self, X:SearchSpace, start, goal, max_samples, r, prc=0.01):
+    def __init__(self, X:SearchSpace, start, goal, max_samples, r, d, prc=0.01):
         """
         X: search space
         start: begin robot pose (th1, th2, th3)
@@ -27,6 +27,7 @@ class RRTBase(object):
         self.sample_count = 0
         self.max_samples = max_samples
         self.r = r
+        self.d = d
         self.prc = prc
         self.start = start
         self.goal = goal
@@ -75,15 +76,15 @@ class RRTBase(object):
         return next(self.nearby(th,1))
 
     def steer(self, th1, th2):
-        # d = self.r 
-        # start, end = np.array(th1),np.array(th2)
-        # norm = np.linalg.norm(end - start)
-        # if norm >= d:
-        #     v = (end - start) / norm
-        #     steered_ptn = start + v*d
-        #     return tuple(steered_ptn)
-        # else:
-        #     return th2
+        d = self.d
+        start, end = np.array(th1),np.array(th2)
+        norm = np.linalg.norm(end - start)
+        if norm >= d:
+            v = (end - start) / norm
+            steered_ptn = start + v*d
+            return tuple(steered_ptn)
+        else:
+            return th2
         return th2
 
     def new_and_near(self):
@@ -222,14 +223,16 @@ class RRTBase(object):
     def get_obs(self):
         return self.X.obs_pos
 
-    def plot_graph(self, add_path=False, path=None):
+    def plot_graph(self, every=10, add_path=False, path=None):
         th_arr = []
         fig = plt.figure()
         ax = plt.axes(projection='3d')
+        i = 0
         for k in self.tree.E.keys():
-            parent = self.tree.E[k]
-            arr = np.array(parent.th)
-            th_arr.append(arr)
+            if i%every == 0:
+                parent = self.tree.E[k]
+                arr = np.array(parent.th)
+                th_arr.append(arr)
             # parent = self.tree.E[k]
             # xx = np.array([parent.th[0], k[0]])
             # yy = np.array([parent.th[1], k[1]])
@@ -241,7 +244,7 @@ class RRTBase(object):
         yy = th_arr[:,1]
         zz = th_arr[:,2]
 
-        ax.scatter3D(xx,yy,zz,alpha=.2)
+        ax.scatter3D(xx,yy,zz,alpha=.1,s=.8)
         ax.scatter3D(self.start[0], self.start[1], self.start[2], 'r')
         ax.scatter3D(self.goal[0], self.goal[1], self.goal[2], 'g')
 

@@ -2,7 +2,6 @@ import platform
 import matplotlib
 # matplotlib.use('nbAgg'
 # print(platform.system())
-from Agent import Agent
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -16,8 +15,8 @@ from utils import stack_arrays
 # Fixing random state for reproducibility
 import torch
 show_box = False
-use_PID = False
-num_obj = 2
+use_PID = True
+num_obj = 3
 evaluation = True
 actor_name = 'actor_0308'
 critic_name = 'critic_0308'
@@ -59,8 +58,8 @@ ax = fig.add_subplot(111, projection='3d')
 
 # Fifty lines of random 3-D lines
 env = Robot_Env.RobotEnv(num_obj=num_obj)
-agent = Agent(env,actor_name=actor_name,critic_name=critic_name,e = .005,enoise=torch.tensor([.5,.1,.1]),noise=.005)
-agent.load_models()
+# agent = Agent(env,actor_name=actor_name,critic_name=critic_name,e = .005,enoise=torch.tensor([.5,.1,.1]),noise=.005)
+# agent.load_models()
 env, state = env.reset()
 # start = np.array([np.pi/4, np.pi/4, np.pi/4])
 # goal = -1*start
@@ -102,8 +101,8 @@ done = False
 score = 0
 while not done:
     state_ = (np.vstack(coord_list), np.vstack(feat_list), state[2], state[3])
-    action = agent.choose_action(state_,evaluate=evaluation)
-    state, reward, done, info = env.step(action, use_PID=use_PID)
+    # action = agent.choose_action(state_,evaluate=evaluation)
+    state, reward, done, info = env.step(np.zeros(3), use_PID=use_PID)
     score += reward
     coord_list, feat_list = stack_arrays(coord_list, feat_list, state)
 

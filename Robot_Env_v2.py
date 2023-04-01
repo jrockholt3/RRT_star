@@ -15,20 +15,22 @@ rng = np.random.default_rng()
 def env_replay(th, w, t_start, th_goal, obs_dict, steps):
     t = t_start
     jnt_err = calc_jnt_err(th, th_goal)
-    dedt  = w * np.sign(jnt_err) 
+    dedt  = -1 * w * np.sign(jnt_err) 
 
     if t>= t_limit/dt:
         reward = -np.inf
         return th, w, reward, False
 
     score = 0
+    flag = True
     done = False
     while not done and t<t_start+steps and t < t_limit/dt:
         tau = PDControl(jnt_err, dedt)
         obj_arr = obs_dict[t]
         temp = nxt_state(obj_arr, th, w, tau, a, l, S)
-        nxt_th = temp[:,0]
-        nxt_w = temp[:,1]
+        nxt_th = temp[0:3,0]
+        prox = temp[3,0]
+        nxt_w = temp[0:3,1]
 
         t+=1
         jnt_err = calc_jnt_err(nxt_th, th_goal)
@@ -36,14 +38,20 @@ def env_replay(th, w, t_start, th_goal, obs_dict, steps):
         th = nxt_th
         w = nxt_w
 
-        if t >= t_limit:
+        if t*dt >= t_limit:
+            # print('terminated on t_limit')
             done = True
         elif np.all(abs(jnt_err) < thres): # no termination for vel
+            # print('terminated by reaching goal')
+            done = True
+        elif prox < min_prox:
+            # print('terminated by collison')
+            # flag = False
             done = True
 
         score += -1 - np.linalg.norm(jnt_err)
 
-    return th, w, score, t, True
+    return th, w, score, t, flag
 
 def gen_rand_pos(quad): #,high):
     xy = (1*np.random.rand(3))

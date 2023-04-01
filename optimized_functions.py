@@ -56,7 +56,7 @@ def asb_link3(obj_pos, th, a, l, S):
 def proximity(obj_pos, th, a, l, S):
     asb_l2 = asb_link2(obj_pos,th,a,l,S)
     asb_l3 = asb_link3(obj_pos,th,a,l,S)
-    prox1 = 0.0
+    prox1 = np.inf
     if asb_l2[0] <= 0.0:
         prox1 = np.linalg.norm(asb_l2)
     elif asb_l2[0] >= l[0]:
@@ -64,7 +64,7 @@ def proximity(obj_pos, th, a, l, S):
     else:
         prox1 = np.linalg.norm(asb_l2[1:3])
     
-    prox2 = 0.0
+    prox2 = np.inf
     if asb_l3[0] <= 0.0:
         prox2 = np.linalg.norm(asb_l2)
     elif asb_l3[0] >= l[1]:
@@ -159,12 +159,14 @@ def nxt_state(obj_pos, th, w, tau, a, l, S):
         nxt_th[nxt_th >= jnt_max] = jnt_max[nxt_th >= jnt_max]
         nxt_th[nxt_th <= jnt_min] = jnt_min[nxt_th <= jnt_min]
 
-    package = np.zeros((3,2),dtype=float64)
+    package = np.zeros((4,2),dtype=float64)
     for i in range(0, package.shape[0]):
         package[i,0] = nxt_th[i]
 
     for i in range(0, package.shape[0]):
         package[i,1] = nxt_w[i]
+
+    package[0,3] = prox
     return package
 
 

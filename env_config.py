@@ -11,7 +11,7 @@ vel_prox = 0.5
 
 # Controller gains
 tau_max = 30 #J*rad/s^2, J = 1
-damping = tau_max*.8
+damping = tau_max*.5
 P = 500
 D = 0
 P_v = 10.0
