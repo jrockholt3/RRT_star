@@ -166,7 +166,7 @@ class RRTBase(object):
         parent = self.tree.E[curr.id]
         while not parent.th == start:
             path.append((parent.t,parent.th,parent.targ))
-            curr = parent.th
+            curr = parent
             parent = self.tree.E[curr.id]
         path.append((0,start,np.zeros(3)))
 

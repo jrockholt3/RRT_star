@@ -4,106 +4,32 @@ import numpy as np
 from rtree import index
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
-
-env = Robot_Env.RobotEnv()
-
-# print(np.ceil(t_limit/dt)*3)
-
-# p = index.Property()
-# p.dimension = 4
-# obs = index.Index(interleaved=True, properties=p)
-# obs_list = gen_obstacles(env,obs)
-
-# th = np.random.uniform(env.robot.jnt_min, env.robot.jnt_max)
-# env.robot.set_pose(th)
-# while env.robot.check_safety():
-#     th = np.random.uniform(env.robot.jnt_min, env.robot.jnt_max)
-#     env.robot.set_pose(th)
-
-# ptns = env.robot.forward()
-# print(ptns)
-# res = .01
-# n = 10
-# t = 30
-# arr = []
-# for i in range(1,ptns.shape[1]-1):
-#     x1 = ptns[0:3,i]
-#     x2 = ptns[0:3,i+1]
-#     u = (x2 - x1)
-#     for i in range(1,n+1):
-# #         new = u*i/n + x1
-# #         tup = (t, new[0], new[1], new[2])
-# #         arr.append(tup)
-
-# # # for x_ in arr:
-# #     print(obs.count(x_)==0)
-# # arr = np.vstack(arr)
-# # xx = arr[:,0]
-# # yy = arr[:,1]
-# # zz = arr[:,2]
-# # fig = plt.figure()
-# # ax = plt.axes(projection='3d')
-# # ax.scatter3D(xx,yy,zz)
-# # ax.axes.set_xlim3d(left=-.6, right=.6) 
-# # ax.axes.set_ylim3d(bottom=-.6, top=.6) 
-# # ax.axes.set_zlim3d(bottom=0, top=.9)
-# # plt.show()
-
-# from Robot_Env import dt, tau_max, j_max as J, jnt_vel_max
-
-# # T = 4*dt
-# # print('current search radius is', T*jnt_vel_max)
-
-# # r = -(J/6)*(T/2)**3 + (J*T/4)*(T/4)**2 + (J*T/12)*(T/2) + J*T**3/12
-
-# # print('Jmx search radius is', r)
-
-# env = Robot_Env.RobotEnv(has_objects=False)
-
-# done = False
-# th = []
-# w = []
-# tau = []
-# start = np.zeros(3)
-# goal = start + np.pi/4
-# g = []
-# env = Robot_Env.RobotEnv(has_objects=True, start=start, goal=goal)
-# while not done:
-#     _,_,done,info = env.step(np.zeros(3),eval=True, use_VControl=True, w=np.ones(3)*Robot_Env.jnt_vel_max/6)
-#     tau.append(info['tau'])
-#     th.append(env.robot.pos)
-#     w.append(env.robot.jnt_vel)
-#     g.append(goal)
-
-
-# fig1 = plt.figure()
-# plt.plot(np.arange(len(w)), w)
-# plt.title('Velocity')
-# fig2 = plt.figure()
-# plt.plot(np.arange(len(th)), th)
-# plt.plot(np.arange(len(g)), g)
-# plt.title('Ang_Pos')
-# fig3 = plt.figure()
-# plt.plot(np.arange(len(tau)), tau)
-# plt.title('Tau')
-# plt.show()
-
+from Robot_Env_v2 import RobotEnv
 from search_space import SearchSpace
-env = Robot_Env.RobotEnv()
-X = SearchSpace((120,120,90), env)
-print(len(env.objs))
-pos = []
+from optimized_functions import proximity, njit_forward, calc_jnt_err, PDControl, nxt_state
 
-for k in X.obs_pos.keys():
-    temp = X.obs_pos[k]
-    pos.append(temp[:,1])
+env = RobotEnv()
 
-pos = np.vstack(pos)
-print(len(pos))
-xx = pos[:,0]
-yy = pos[:,1]
-zz = pos[:,2]
-fig = plt.figure()
-ax = plt.axes(projection='3d')
-ax.scatter3D(xx,yy,zz)
-plt.show()
+X = SearchSpace((.6,.6,.9), env)
+# print('t=0', X.obs_pos[0])
+# print('t=0', X.obs_pos[1])
+
+th = np.array([0, 0, 0], dtype=float)
+w = np.array([0.0,0.3,0.0])
+th_goal = np.array([np.pi/4, np.pi/4, np.pi/4])
+err = calc_jnt_err(th, th_goal)
+dedt = -1*w
+tau = PDControl(err,dedt)
+
+l = env.robot.links
+S = env.robot.S
+aph = env.robot.aph
+
+c = np.sqrt(2)/2
+curr_pos = np.array([[c, c, .9]])
+print('curr_pos shape', curr_pos.shape)
+
+package = nxt_state(curr_pos, th, w, tau, aph, l, S)
+print('prox', proximity(curr_pos[:,0], th, aph, l, S))
+print('forward', np.round(njit_forward(th, aph, l, S, P_3=np.array([.3,0,0.0,1.0])),2))
+print('package', package)

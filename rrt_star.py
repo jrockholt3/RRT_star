@@ -12,7 +12,7 @@ class RRT_star(RRTBase):
         super().__init__(X, start, goal, max_samples, r, d)
 
     def get_reachable(self, v, targ):
-        print(v.t)
+        # print(v.t)
         if v.t < t_limit/dt:
             targ_i = self.steer(v.th, targ)
             th_fin, w_fin, reward, t_fin, flag = self.X.env.env_replay(v, targ_i, self.X.obs_pos, self.steps)
@@ -148,7 +148,7 @@ class RRT_star(RRTBase):
                 converged = self.can_connect_to_goal()
                 if converged: 
                     print('converged!')
-                    # path = self.reconstruct_path(self.start, self.goal)
+                    path = self.reconstruct_path(self.start, self.goal)
                 
             if loop_count > int(1e6) or self.sample_count > self.max_samples:
                 converged = True
@@ -156,7 +156,7 @@ class RRT_star(RRTBase):
                 v_b = vertex(self.goal)
                 if self.connect_with_pateince(30):
                     print('converged with patience')
-                    # path = self.reconstruct_path(self.start, self.goal)
+                    path = self.reconstruct_path(self.start, self.goal)
                 else:
                     print('failed to converge')
 
@@ -164,7 +164,7 @@ class RRT_star(RRTBase):
 
 
 
-env = RobotEnv(num_obj=1)
+env = RobotEnv(num_obj=3)
 X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
 start = tuple(env.start)
 goal = tuple(env.goal)
@@ -181,4 +181,4 @@ print('min thres is', thres)
 rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
 path = rrt.rrt_search()
 obs = rrt.get_obs()
-rrt.plot_graph()
+rrt.plot_graph(every=1.0)
