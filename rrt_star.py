@@ -111,17 +111,26 @@ class RRT_star(RRTBase):
         loop_count = 0
         path = []
         traj=[]
+        v = self.tree.E[0]
+        for i in range(100):
+            th_new = self.X.sample()
+            v_reached, flag = self.get_reachable(v,th_new)
+            if flag:
+                child = self.add_edge(v_reached,v)
+                self.add_vertex(child)
+        
         while not converged:
             # sample a new node
-            th_new = self.X.sample()
-            if loop_count%100 == 0:
-                th_new = self.goal
+            if loop_count%5 == 0:
+                th_new = self.goal # bias
+            else:
+                th_new = self.X.sample() # explore 
             # find n nearest nodes
             near = self.nearby(th_new, self.n)
             # try to reach new node from nearby nodes
             v_new = []
             for v in near:
-                v = self.recalc_path(v) # update v's position
+                # v = self.recalc_path(v) # update v's position
                 v_reached,flag = self.get_reachable(v, th_new)
                 if flag:
                     v_new.append((v,v_reached))
@@ -136,12 +145,19 @@ class RRT_star(RRTBase):
             v, v_added_flag = self.add_highest_reward(v_new)
             # self.add_all(v_new)
 
-
+            # parents = []
+            # curr = v.copy()
+            # look_back = 5
+            # for i in range(look_back):
+            #     parents.append(self.tree.E[curr.id])
 
             # now we need to rewire the newly added node
-            if v.id in self.tree.E:
-                near = self.nearby(v.th, self.n) # find all the closests nodes to the newly added one 
-                self.rewire(v, near)
+            # if v_added_flag:
+            #     if v.id in self.tree.E:
+            #         # near = self.get_win_radius(v.th, jnt_vel_max*self.steps*dt)
+            #         # print('within radius',jnt_vel_max*self.steps*dt,'there are', len(near))
+            #         near = self.nearby(v.th, 5)
+            #         self.rewire(v, near)
 
             loop_count += 1
             if loop_count%100 == 0:
@@ -154,6 +170,7 @@ class RRT_star(RRTBase):
             if loop_count>=max_samples:
                 v_a = self.get_nearest(self.goal)
                 v_b = vertex(self.goal)
+                converged = True
                 if self.connect_with_pateince(30):
                     print('converged with patience')
                     path,traj = self.reconstruct_path(self.start, self.goal)
@@ -169,12 +186,12 @@ X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
 start = tuple(env.start)
 goal = tuple(env.goal)
 print('goal', goal)
-steps = 5
+steps = 10
 thres = np.linalg.norm([.003,.003,.003])*(steps/25)
-n = 1
+n = 25
 r = np.linalg.norm(jnt_vel_max*dt*steps*np.ones(3)/5)
 d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
-max_samples = int(10000)
+max_samples = int(3000)
 rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
 path,traj = rrt.rrt_search()
 print(path)

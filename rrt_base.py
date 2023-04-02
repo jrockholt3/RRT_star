@@ -76,9 +76,11 @@ class RRTBase(object):
         return next(self.nearby(th,1))
 
     def get_win_radius(self, center, r):
-        top = center + r
-        bottom = center - r
-        return list(self.tree.V.intersection())
+        top = (center[0]+r, center[1]+r, center[2]+r) 
+        bottom = (center[0]-r, center[1]-r, center[2]-r)
+        coords = (bottom[0], bottom[1], bottom[2], 
+                top[0], top[1], top[2])
+        return list(self.tree.V.intersection(coords,objects='raw'))
 
 
     def steer(self, th1, th2):
