@@ -8,7 +8,10 @@ from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d.axes3d as p3
 import matplotlib.animation as animation
 import Robot_Env
-from Robot_Env import dt, RobotEnv, jnt_vel_max
+# from Robot_Env import dt, RobotEnv, jnt_vel_max
+from env_config import dt, jnt_vel_max
+from Robot_Env_v2 import RobotEnv as RobotEnv2
+from Robot_Env import RobotEnv as RobotEnv1
 from Object_v2 import rand_object
 from Robot3D import workspace_limits as lims 
 from utils import stack_arrays
@@ -61,19 +64,24 @@ ax = fig.add_subplot(111, projection='3d')
 
 # Generate Path
 path = []
+traj = []
 max_iter = 5
 i = 0
 while len(path)==0 and i < max_iter:
-    env = RobotEnv()
-    global_goal = env.goal.copy()
+    env = RobotEnv2(num_obj=3)
     X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
     start = tuple(env.start)
     goal = tuple(env.goal)
-    r = jnt_vel_max*dt*3
-    max_samples = int(5000)
-
-    rrt = RRT_star(X, start, goal, max_samples, r,n=5,steps=8)
-    path = rrt.rrt_search()
+    global_goal = np.array(goal)
+    print('goal', goal)
+    steps = 5
+    thres = np.linalg.norm([.003,.003,.003])*(steps/25)
+    n = 10
+    r = np.linalg.norm(jnt_vel_max*dt*steps*np.ones(3)/10)
+    d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
+    max_samples = int(3000)
+    rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
+    path,traj = rrt.rrt_search()
     obs = rrt.get_obs()
 
     i += 1
@@ -83,15 +91,15 @@ y_arr = []
 z_arr = []
 # obj1's data
 x_arr2,y_arr2,z_arr2 = [],[],[]
-
-env.start = start
-env.robot.set_pose(start)
+env = RobotEnv1(has_objects=False)
+env.start = np.array(start)
+env.robot.set_pose(np.array(start))
 env.robot.set_jnt_vel(np.zeros(3))
 env.t_count = 0
-prev_tup = path.pop()
+
 score = 0
-for tup in path: # tup = (t, th, targ)
-    temp = tup[2]
+for tup in traj: # tup = (t, targ)
+    temp = tup[1]
     if not isinstance(temp,np.ndarray):
         temp = np.array(temp)
     env.goal = temp

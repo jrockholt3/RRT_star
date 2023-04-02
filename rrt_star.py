@@ -110,6 +110,7 @@ class RRT_star(RRTBase):
         converged = False
         loop_count = 0
         path = []
+        traj=[]
         while not converged:
             # sample a new node
             th_new = self.X.sample()
@@ -120,7 +121,7 @@ class RRT_star(RRTBase):
             # try to reach new node from nearby nodes
             v_new = []
             for v in near:
-                # v = self.recalc_path(v) # update v's position
+                v = self.recalc_path(v) # update v's position
                 v_reached,flag = self.get_reachable(v, th_new)
                 if flag:
                     v_new.append((v,v_reached))
@@ -138,29 +139,28 @@ class RRT_star(RRTBase):
 
 
             # now we need to rewire the newly added node
-            # if v.id in self.tree.E:
-            #     near = self.nearby(v.th, self.n) # find all the closests nodes to the newly added one 
-            #     self.rewire(v, near)
+            if v.id in self.tree.E:
+                near = self.nearby(v.th, self.n) # find all the closests nodes to the newly added one 
+                self.rewire(v, near)
 
             loop_count += 1
             if loop_count%100 == 0:
                 print(loop_count,'checking for convergence', self.sample_count)
-                converged = self.can_connect_to_goal()
+                v, converged = self.can_connect_to_goal()
                 if converged: 
                     print('converged!')
-                    path = self.reconstruct_path(self.start, self.goal)
+                    path,traj = self.reconstruct_path(v, self.start, self.goal)
                 
-            if loop_count > int(1e6) or self.sample_count > self.max_samples:
-                converged = True
+            if loop_count>=max_samples:
                 v_a = self.get_nearest(self.goal)
                 v_b = vertex(self.goal)
                 if self.connect_with_pateince(30):
                     print('converged with patience')
-                    path = self.reconstruct_path(self.start, self.goal)
+                    path,traj = self.reconstruct_path(self.start, self.goal)
                 else:
                     print('failed to converge')
 
-        return path
+        return path, traj
 
 
 
@@ -169,16 +169,13 @@ X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
 start = tuple(env.start)
 goal = tuple(env.goal)
 print('goal', goal)
-steps = 25
-thres = np.linalg.norm([.003,.003,.003])
-n = 100
-r = np.linalg.norm(jnt_vel_max*dt*steps/5*np.ones(3))
+steps = 5
+thres = np.linalg.norm([.003,.003,.003])*(steps/25)
+n = 1
+r = np.linalg.norm(jnt_vel_max*dt*steps*np.ones(3)/5)
 d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
 max_samples = int(10000)
-print('radius is', r)
-print('min thres is', thres)
-
 rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
-path = rrt.rrt_search()
-obs = rrt.get_obs()
-rrt.plot_graph(every=1.0)
+path,traj = rrt.rrt_search()
+print(path)
+rrt.plot_graph(every=1.0,add_path=True, path=path)

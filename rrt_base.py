@@ -75,6 +75,12 @@ class RRTBase(object):
         """
         return next(self.nearby(th,1))
 
+    def get_win_radius(self, center, r):
+        top = center + r
+        bottom = center - r
+        return list(self.tree.V.intersection())
+
+
     def steer(self, th1, th2):
         d = self.d
         start, end = np.array(th1),np.array(th2)
@@ -135,8 +141,8 @@ class RRTBase(object):
             v_goal = vertex(self.goal, v_nearest.t+1)
             self.add_vertex(v_goal)
             self.add_edge(v_goal, v_nearest)
-            return True
-        return False
+            return v_nearest, True
+        return None, False
 
     def connect_with_pateince(self, tries):
         '''
@@ -153,26 +159,28 @@ class RRTBase(object):
                     return True
         return False
 
-    def reconstruct_path(self, start, goal):
+    def reconstruct_path(self, curr, start, goal):
         '''
         start: (th1, th2, th3)
         goal: (th1, th2, th3)
         '''
         # path = [goal]
         path = []
-        curr = self.nearby(goal, n=1)
+        traj = []
+        path.append(goal)
         if start == goal:
             return path
-        parent = self.tree.E[curr.id]
-        while not parent.th == start:
-            path.append((parent.t,parent.th,parent.targ))
-            curr = parent
-            parent = self.tree.E[curr.id]
-        path.append((0,start,np.zeros(3)))
+        while not curr.id == 0:
+            # path.append((curr.t,curr.th,curr.targ))
+            print('adding', curr.th)
+            path.append(curr.th)
+            traj.append((curr.t, curr.targ))
+            curr = self.tree.E[curr.id]
+        path.append(start)
 
         path.reverse() 
         
-        return path
+        return path, traj
     
     def recalc_path(self, leaf:vertex):
         '''
@@ -224,6 +232,11 @@ class RRTBase(object):
         return self.X.obs_pos
 
     def plot_graph(self, every=10, add_path=False, path=None):
+        # entres = np.empty(len(self.tree.E),dtype=tuple)
+        # for k in self.tree.E.keys():
+        #     parent = self.tree.E[k]
+        #     entres[parent.id] = parent.th
+
         th_arr = []
         fig = plt.figure()
         ax = plt.axes(projection='3d')
@@ -233,27 +246,28 @@ class RRTBase(object):
                 parent = self.tree.E[k]
                 arr = np.array(parent.th)
                 th_arr.append(arr)
-            # parent = self.tree.E[k]
-            # xx = np.array([parent.th[0], k[0]])
-            # yy = np.array([parent.th[1], k[1]])
-            # zz = np.array([parent.th[2], k[2]])
-            # ax.plot3D(xx,yy,zz,'k',alpha=.1)
+                # child_th = entres[k]
+                # # parent = self.tree.E[k]
+                # xx = np.array([parent.th[0], child_th[0]])
+                # yy = np.array([parent.th[1], child_th[0]])
+                # zz = np.array([parent.th[2], child_th[0]])
+                # ax.plot3D(xx,yy,zz,'k',alpha=.1)
 
         th_arr = np.vstack(th_arr)
         xx = th_arr[:,0]
         yy = th_arr[:,1]
         zz = th_arr[:,2]
 
-        ax.scatter3D(xx,yy,zz,alpha=.1,s=.8)
+        ax.scatter3D(xx,yy,zz,alpha=.1)
         ax.scatter3D(self.start[0], self.start[1], self.start[2], 'r')
         ax.scatter3D(self.goal[0], self.goal[1], self.goal[2], 'g')
 
         if add_path:
             xx,yy,zz = [],[],[]
-            for th_tup in path:
-                xx.append(th_tup[0])
-                yy.append(th_tup[1])
-                zz.append(th_tup[2])
+            for th in path:
+                xx.append(th[0])
+                yy.append(th[1])
+                zz.append(th[2])
 
             ax.plot3D(xx,yy,zz, 'r')
 
