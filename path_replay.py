@@ -8,13 +8,20 @@ from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d.axes3d as p3
 import matplotlib.animation as animation
 import Robot_Env
-from Robot_Env import dt, RobotEnv, jnt_vel_max
+# from Robot_Env import dt, RobotEnv, jnt_vel_max
+from env_config import dt, jnt_vel_max, damping as Z
+from Robot_Env_v2 import RobotEnv as RobotEnv2
+from Robot_Env_v2 import env_replay
+from Robot_Env import RobotEnv as RobotEnv1
 from Object_v2 import rand_object
 from Robot3D import workspace_limits as lims 
 from utils import stack_arrays
 from search_space import SearchSpace
 from rrt_star import RRT_star
 from support_classes import vertex
+from Robot3D import robot_3link
+from trajectory import Trajectory
+from optimized_functions import calc_jnt_err
 
 show_box = False
 use_PID = False
@@ -61,64 +68,70 @@ ax = fig.add_subplot(111, projection='3d')
 
 # Generate Path
 path = []
+traj = []
 max_iter = 5
 i = 0
 while len(path)==0 and i < max_iter:
-    env = RobotEnv()
-    global_goal = env.goal.copy()
+    env = RobotEnv2(num_obj=3)
     X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
     start = tuple(env.start)
     goal = tuple(env.goal)
-    r = jnt_vel_max*dt*3
-    max_samples = int(5000)
-
-    rrt = RRT_star(X, start, goal, max_samples, r,n=5,steps=8)
-    path = rrt.rrt_search()
+    global_goal = np.array(goal)
+    print('goal', goal)
+    steps = 5
+    thres = np.linalg.norm([.003,.003,.003])*(steps/25)
+    n = 25
+    r = np.linalg.norm(jnt_vel_max*dt*steps*np.ones(3)/3)
+    d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
+    max_samples = int(3000)
+    rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
+    path,traj = rrt.rrt_search()
     obs = rrt.get_obs()
 
     i += 1
+
+# rrt.plot_graph(every=1)
 
 x_arr = []
 y_arr = []
 z_arr = []
 # obj1's data
 x_arr2,y_arr2,z_arr2 = [],[],[]
-
-env.start = start
-env.robot.set_pose(start)
-env.robot.set_jnt_vel(np.zeros(3))
-env.t_count = 0
-prev_tup = path.pop()
+robot = robot_3link()
+a = robot.aph
+l = robot.links
+S = robot.S
+th = np.array(start)
+w = np.zeros_like(th)
+t = 0
 score = 0
-for tup in path: # tup = (t, th, targ)
-    temp = tup[2]
-    if not isinstance(temp,np.ndarray):
-        temp = np.array(temp)
-    env.goal = temp
-    env.jnt_err = Robot_Env.calc_jnt_err(env.robot.pos, env.goal)
-    segment_complete=False
-    while not segment_complete and env.t_count < Robot_Env.t_limit/Robot_Env.dt:
-        obs_arr = obs[env.t_count]
-        _, reward, _, _ = env.step(np.zeros(0), use_PID=True, eval=True, obs_arr=obs_arr)
-        score += reward
+tau_list = Trajectory(traj)
+for tup in tau_list:
+    targ = tup[1]
+    obs_arr = obs[t]
+    # tau_in = tau + Z*w
 
-        if env.t_count >= tup[0]:
-            segment_complete = True
+    nxt_th, nxt_w, reward, t, flag = env_replay(th, w, t, np.array(targ), obs, steps=1)
+    # nxt_th = tau * dt**2/2 + w*dt + th
+    # nxt_w = tau*dt + w
+    # t+=1
 
-        temp = env.robot.forward()
-        temp2 = env.robot.forward(th=global_goal)
-        temp = np.hstack((temp, temp2))
-        x_arr.append(temp[0,:])
-        y_arr.append(temp[1,:])
-        z_arr.append(temp[2,:])
-        temp = []
-        for i in range(obs_arr.shape[1]):
-            temp.append(obs_arr[:,i])
-        temp = np.vstack(temp)
-        x_arr2.append(temp[:,0])
-        y_arr2.append(temp[:,1])
-        z_arr2.append(temp[:,2])
+    robot.set_pose(th)
+    temp = robot.forward()
+    temp2 = robot.forward(th=global_goal)
+    temp = np.hstack((temp, temp2))
+    x_arr.append(temp[0,:])
+    y_arr.append(temp[1,:])
+    z_arr.append(temp[2,:])
+    temp = []
+    for i in range(obs_arr.shape[1]):
+        temp.append(obs_arr[:,i])
+    temp = np.vstack(temp)
+    x_arr2.append(temp[:,0])
+    y_arr2.append(temp[:,1])
+    z_arr2.append(temp[:,2])
 
+    th, w = nxt_th, nxt_w
 
 print('score ', score) 
 
@@ -222,3 +235,5 @@ ani = animation.FuncAnimation(
 # ani.save('file.gif')
 
 plt.show()
+
+rrt.plot_graph(every=1, add_path=True, path=path)

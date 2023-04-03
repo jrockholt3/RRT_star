@@ -40,37 +40,38 @@ def T_inverse(T):
 
 @njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def asb_link2(obj_pos, th, a, l, S):
-    T_2toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[1],a[0],l[0],S[1])
+    T_2toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])
     inv_T = T_inverse(T_2toF)
     vec = np.array([obj_pos[0],obj_pos[1],obj_pos[2],1])
     return inv_T@vec
 
 @njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def asb_link3(obj_pos, th, a, l, S):
-    T_3toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])
+    T_3toF = T_1F(th[0], S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])
     inv_T = T_inverse(T_3toF)
     vec = np.array([obj_pos[0],obj_pos[1],obj_pos[2],1])
     return inv_T@vec
 
 @njit((float64)(float64[:],float64[:],float64[:],float64[:],float64[:]))
 def proximity(obj_pos, th, a, l, S):
+    th = th + np.array([0,np.pi/2,0])
     asb_l2 = asb_link2(obj_pos,th,a,l,S)
     asb_l3 = asb_link3(obj_pos,th,a,l,S)
-    prox1 = 0.0
+    prox1 = np.inf
     if asb_l2[0] <= 0.0:
-        prox1 = np.linalg.norm(asb_l2)
-    elif asb_l2[0] >= l[0]:
-        prox1 = np.linalg.norm(asb_l2)
+        prox1 = np.linalg.norm(asb_l2[0:3])
+    elif asb_l2[0] >= l[1]:
+        prox1 = np.linalg.norm(asb_l2[0:3] - np.array([l[1],0.0,0.0]))
     else:
         prox1 = np.linalg.norm(asb_l2[1:3])
     
-    prox2 = 0.0
+    prox2 = np.inf
     if asb_l3[0] <= 0.0:
-        prox2 = np.linalg.norm(asb_l2)
-    elif asb_l3[0] >= l[1]:
-        prox2 = np.linalg.norm(asb_l2)
+        prox2 = np.linalg.norm(asb_l3[0:3])
+    elif asb_l3[0] >= l[2]:
+        prox2 = np.linalg.norm(asb_l3[0:3] - np.array([l[2],0.0,0.0]))
     else:
-        prox2 = np.linalg.norm(asb_l2[1:3])
+        prox2 = np.linalg.norm(asb_l3[1:3])
 
     if prox1 < prox2:
         return prox1
@@ -79,6 +80,7 @@ def proximity(obj_pos, th, a, l, S):
 
 @njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def njit_forward(th, a, l, S, P_3):
+    th = th + np.array([0,np.pi/2,0])
     return T_1F(th[0],S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])@P_3    
 
 @njit((float64)(float64),nogil=True)
@@ -159,12 +161,14 @@ def nxt_state(obj_pos, th, w, tau, a, l, S):
         nxt_th[nxt_th >= jnt_max] = jnt_max[nxt_th >= jnt_max]
         nxt_th[nxt_th <= jnt_min] = jnt_min[nxt_th <= jnt_min]
 
-    package = np.zeros((3,2),dtype=float64)
+    package = np.zeros((4,2),dtype=float64)
     for i in range(0, package.shape[0]):
         package[i,0] = nxt_th[i]
 
     for i in range(0, package.shape[0]):
         package[i,1] = nxt_w[i]
+
+    package[3,0] = prox
     return package
 
 

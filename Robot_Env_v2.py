@@ -12,23 +12,28 @@ l = robot.links
 S = robot.S
 rng = np.random.default_rng()
 
-def env_replay(th, w, t_start, th_goal, obs_dict, steps):
+def env_replay(th, w, t_start, th_goal, obs_dict, steps, use_tau=False, tau_in = np.zeros(3)):
     t = t_start
     jnt_err = calc_jnt_err(th, th_goal)
-    dedt  = w * np.sign(jnt_err) 
+    dedt  = -1 * w * np.sign(jnt_err) 
 
     if t>= t_limit/dt:
         reward = -np.inf
         return th, w, reward, False
 
     score = 0
+    flag = True
     done = False
     while not done and t<t_start+steps and t < t_limit/dt:
-        tau = PDControl(jnt_err, dedt)
+        if use_tau:
+            tau = tau_in
+        else:
+            tau = PDControl(jnt_err, dedt)
         obj_arr = obs_dict[t]
         temp = nxt_state(obj_arr, th, w, tau, a, l, S)
-        nxt_th = temp[:,0]
-        nxt_w = temp[:,1]
+        nxt_th = temp[0:3,0]
+        prox = temp[3,0]
+        nxt_w = temp[0:3,1]
 
         t+=1
         jnt_err = calc_jnt_err(nxt_th, th_goal)
@@ -36,14 +41,20 @@ def env_replay(th, w, t_start, th_goal, obs_dict, steps):
         th = nxt_th
         w = nxt_w
 
-        if t >= t_limit:
+        if t*dt >= t_limit:
+            # print('terminated on t_limit')
             done = True
         elif np.all(abs(jnt_err) < thres): # no termination for vel
+            # print('terminated by reaching goal')
+            done = True
+        elif prox < min_prox:
+            # print('terminated by collison')
+            # flag = False
             done = True
 
-        score += -np.linalg.norm(jnt_err)
+        score += -1 
 
-    return th, w, score, t, True
+    return th, w, score, t, flag
 
 def gen_rand_pos(quad): #,high):
     xy = (1*np.random.rand(3))
@@ -51,10 +62,12 @@ def gen_rand_pos(quad): #,high):
         xy[0] = -1*xy[0]
     if quad==3 or quad==4:
         xy[1] = -1*xy[1]
-    mag = .4*rng.random() + .2
+    mag = .3*rng.random() + .3
     goal = mag * .9999 * (xy/np.linalg.norm(xy)) + np.array([0,0,.3])
     if goal[2] < 0.05:
         goal[2] = 0.05
+    if goal[2] > .7:
+        goal[2] = .7
     
     return goal 
 
