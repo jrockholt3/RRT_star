@@ -12,7 +12,7 @@ l = robot.links
 S = robot.S
 rng = np.random.default_rng()
 
-def env_replay(th, w, t_start, th_goal, obs_dict, steps):
+def env_replay(th, w, t_start, th_goal, obs_dict, steps, use_tau=False, tau_in = np.zeros(3)):
     t = t_start
     jnt_err = calc_jnt_err(th, th_goal)
     dedt  = -1 * w * np.sign(jnt_err) 
@@ -25,7 +25,10 @@ def env_replay(th, w, t_start, th_goal, obs_dict, steps):
     flag = True
     done = False
     while not done and t<t_start+steps and t < t_limit/dt:
-        tau = PDControl(jnt_err, dedt)
+        if use_tau:
+            tau = tau_in
+        else:
+            tau = PDControl(jnt_err, dedt)
         obj_arr = obs_dict[t]
         temp = nxt_state(obj_arr, th, w, tau, a, l, S)
         nxt_th = temp[0:3,0]
@@ -49,7 +52,7 @@ def env_replay(th, w, t_start, th_goal, obs_dict, steps):
             # flag = False
             done = True
 
-        score += -1 - np.linalg.norm(jnt_err)
+        score += -1 
 
     return th, w, score, t, flag
 

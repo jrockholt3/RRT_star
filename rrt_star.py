@@ -5,10 +5,11 @@ from support_classes import vertex
 import numpy as np
 
 class RRT_star(RRTBase):
-    def __init__(self, X, start, goal, max_samples, r, d,  thres, n=5, steps=5):
+    def __init__(self, X, start, goal, max_samples, r, d,  thres, n=5, steps=5, look_back=3):
         self.n = n
         self.steps = steps
         self.thres = thres
+        self.look_back = look_back
         super().__init__(X, start, goal, max_samples, r, d)
 
     def get_reachable(self, v, targ):
@@ -39,6 +40,47 @@ class RRT_star(RRTBase):
                     parent = p
                     best = np.linalg.norm(targ- np.array(v_best.th))
                     # best = v.reward
+        if flag:
+            child = self.add_edge(v_best, parent)
+            self.add_vertex(child)
+            return child, flag
+        else:
+            return None, flag
+
+    def add_nearest_with_look_back(self, pv_pairs, targ):
+        '''
+        add node nearest to the target
+        '''
+        # (parent,v_best) = pv_pairs.pop()
+        best = np.inf
+        # best = v_best.reward
+        flag = False
+        for tup in pv_pairs:
+            p,v = tup[0],tup[1]
+            err = np.linalg.norm(targ- np.array(v.th))
+            d = np.linalg.norm(np.array(p.th) - np.array(v.th))
+            if d >= self.thres:
+                if err < best: # v.reward > best:
+                    flag = True
+                    v_best = v
+                    parent = p
+                    best = np.linalg.norm(targ- np.array(v_best.th))
+                    # best = v.reward
+
+        if flag: 
+            curr = v.copy()
+            for i in range(self.look_back):
+                parent = self.tree.E[curr.id]
+                v_reached,flag2 = self.get_reachable(parent, targ)
+                d = np.linalg.norm(np.array(parent.th) - np.array(v_reached.th))
+                if flag2:
+                    if d >= self.thres:
+                        child = self.add_edge(v_reached, parent)
+                        self.add_vertex(child)
+                if parent.id == 0:
+                    i = self.look_back + 1
+                curr = parent
+
         if flag:
             child = self.add_edge(v_best, parent)
             self.add_vertex(child)
@@ -77,7 +119,7 @@ class RRT_star(RRTBase):
         for tup in pv_pairs:
             p,v = tup[0],tup[1]
             d = np.linalg.norm(np.array(p.th) - np.array(v.th))
-            if d >= thres: 
+            if d >= self.thres: 
                 child = self.add_edge(v,p)
                 self.add_vertex(child)
 
@@ -121,7 +163,7 @@ class RRT_star(RRTBase):
         
         while not converged:
             # sample a new node
-            if loop_count%5 == 0:
+            if loop_count%50 == 0:
                 th_new = self.goal # bias
             else:
                 th_new = self.X.sample() # explore 
@@ -142,9 +184,20 @@ class RRT_star(RRTBase):
             # adds the node that is the clostest to the target reachable
             # from the n_nodes list in v_new
             # v, v_added_flag = self.add_nearest(v_new, th_new)
+            # v, v_added_flag = self.add_nearest_with_look_back(v_new, th_new)
             v, v_added_flag = self.add_highest_reward(v_new)
             # self.add_all(v_new)
-
+            # if v_added_flag: 
+            #     curr = v.copy()
+            #     for i in range(self.look_back):
+            #         parent = self.tree.E[curr.id]
+            #         v_reached,flag = self.get_reachable(parent, th_new)
+            #         if flag:
+            #             child = self.add_edge(v_reached, parent)
+            #             self.add_vertex(child)
+            #         if parent.id == 0:
+            #             i = self.look_back + 1
+                    # curr = parent
             # parents = []
             # curr = v.copy()
             # look_back = 5
@@ -162,37 +215,54 @@ class RRT_star(RRTBase):
             loop_count += 1
             if loop_count%100 == 0:
                 print(loop_count,'checking for convergence', self.sample_count)
-                v, converged = self.can_connect_to_goal()
-                if converged: 
-                    print('converged!')
-                    path,traj = self.reconstruct_path(v, self.start, self.goal)
+                v_near = self.get_win_radius(self.goal, self.r)
+                if len(v_near) > self.n:
+                    print('converaged',len(v_near))
+                    r_best = -np.inf
+                    for v in v_near:
+                        r_i = self.reward_calc(v)
+                        if r_i > r_best:
+                            v_best = v.copy()
+                            r_best = r_i
+                    converged = True
+                    path,traj = self.reconstruct_path(v_best, self.start, self.goal)
+                # v, converged = self.can_connect_to_goal()
+                # if converged: 
+                #     # v_near = self.nearby(self.goal, self.n)
+                #     # pairs = []
+                #     # for v in v_near:
+                #     #     pairs.append((self.tree.E[v.id], v))
+                #     # v_best, v_added_flag = self.add_highest_reward(pairs)
+                #     print('converged!')
+                #     path,traj = self.reconstruct_path(v, self.start, self.goal)
                 
-            if loop_count>=max_samples:
-                v_a = self.get_nearest(self.goal)
-                v_b = vertex(self.goal)
-                converged = True
+            if loop_count>=self.max_samples:
+                v, converged = self.can_connect_to_goal()
                 if self.connect_with_pateince(30):
                     print('converged with patience')
                     path,traj = self.reconstruct_path(self.start, self.goal)
+                elif converged:
+                    path,traj = self.reconstruct_path(v, self.start, self.goal)
                 else:
                     print('failed to converge')
+                    converged = True
 
         return path, traj
 
 
 
-env = RobotEnv(num_obj=3)
-X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
-start = tuple(env.start)
-goal = tuple(env.goal)
-print('goal', goal)
-steps = 10
-thres = np.linalg.norm([.003,.003,.003])*(steps/25)
-n = 25
-r = np.linalg.norm(jnt_vel_max*dt*steps*np.ones(3)/5)
-d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
-max_samples = int(3000)
-rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
-path,traj = rrt.rrt_search()
-print(path)
-rrt.plot_graph(every=1.0,add_path=True, path=path)
+# env = RobotEnv(num_obj=3)
+# X = SearchSpace((750, np.pi, .9*np.pi, .9*np.pi), env)
+# start = tuple(env.start)
+# goal = tuple(env.goal)
+# print('goal', goal)
+# steps = 5
+# thres = np.linalg.norm([.003,.003,.003])*(steps/25)
+# n = 5
+# r = np.linalg.norm(jnt_vel_max*dt*steps*np.ones(3)/3)
+# d = np.linalg.norm(jnt_vel_max*dt*steps*1.5*np.ones(3))
+# max_samples = int(3000)
+# rrt = RRT_star(X, start, goal, max_samples, r, d, thres,n=n,steps=steps)
+# path,traj = rrt.rrt_search()
+# print(path)
+# rrt.plot_graph(every=1.0,add_path=True, path=path)

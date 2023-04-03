@@ -176,7 +176,7 @@ class RRTBase(object):
             # path.append((curr.t,curr.th,curr.targ))
             print('adding', curr.th)
             path.append(curr.th)
-            traj.append((curr.t, curr.targ))
+            traj.append((curr.t, curr.th, curr.w))
             curr = self.tree.E[curr.id]
         path.append(start)
 

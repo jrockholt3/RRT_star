@@ -80,7 +80,7 @@ def proximity(obj_pos, th, a, l, S):
 
 @njit((float64[:])(float64[:],float64[:],float64[:],float64[:],float64[:]),nogil=True)
 def njit_forward(th, a, l, S, P_3):
-    th = np.array([0,np.pi/2,0])
+    th = th + np.array([0,np.pi/2,0])
     return T_1F(th[0],S[0])@T_ji(th[1],a[0],l[0],S[1])@T_ji(th[2],a[1],l[1],S[2])@P_3    
 
 @njit((float64)(float64),nogil=True)
